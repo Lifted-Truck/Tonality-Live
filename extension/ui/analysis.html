@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --p-live-ui-bg: hsl(0, 0%, 21%);
+        --p-live-control-bg: hsl(0, 0%, 16%);
+        --p-live-input-bg: hsl(0, 0%, 12%);
+        --p-live-text-primary: hsl(0, 0%, 71%);
+        --p-live-text-secondary: hsl(0, 0%, 41%);
+        --p-live-control-border: hsl(0, 0%, 7%);
+        --p-live-accent-primary: hsl(31, 100%, 67%);
+        --p-live-control-text--enabled: hsl(0, 0%, 7%);
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--p-live-ui-bg);
+        color: var(--p-live-text-primary);
+        font: 12px/1.5 -apple-system, "Segoe UI", sans-serif;
+      }
+      h1 { font-size: 13px; margin: 0 0 12px; color: var(--p-live-text-primary); }
+      .key {
+        background: var(--p-live-control-bg);
+        border: 1px solid var(--p-live-control-border);
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+      }
+      .key b { color: var(--p-live-accent-primary); font-size: 14px; }
+      .muted { color: var(--p-live-text-secondary); }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 4px 6px; border-bottom: 1px solid var(--p-live-control-border); }
+      td.beat { color: var(--p-live-text-secondary); width: 48px; }
+      td.name { color: var(--p-live-text-primary); font-weight: 600; }
+      td.role { color: var(--p-live-text-secondary); text-align: right; }
+      .error { color: hsl(0, 70%, 65%); white-space: pre-wrap; }
+      button {
+        margin-top: 14px;
+        background: var(--p-live-accent-primary);
+        color: var(--p-live-control-text--enabled);
+        border: none;
+        border-radius: 3px;
+        padding: 6px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <button id="close">Close</button>
+    <script>
+      const PAYLOAD = __TONALITY_PAYLOAD__;
+      const root = document.getElementById("root");
+
+      function esc(s) {
+        return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      }
+
+      function render() {
+        if (PAYLOAD.error) {
+          root.innerHTML = '<h1>Tonality</h1><div class="error">' + esc(PAYLOAD.error) + "</div>";
+          return;
+        }
+        const s = PAYLOAD.summary || { key: null, chords: [] };
+        let html = "<h1>Tonality analysis</h1>";
+        if (s.key) {
+          const conf = s.key.margin != null ? " &middot; margin " + s.key.margin.toFixed(2) : "";
+          html +=
+            '<div class="key">key&nbsp; <b>' +
+            esc(s.key.name) +
+            '</b><span class="muted">' +
+            conf +
+            "</span></div>";
+        } else {
+          html += '<div class="key muted">No clear key (atonal or too little material).</div>';
+        }
+        if (s.chords && s.chords.length) {
+          html += "<table>";
+          for (const c of s.chords) {
+            const beat = c.onset != null ? Number(c.onset).toFixed(2) : "";
+            html +=
+              '<tr><td class="beat">' +
+              esc(beat) +
+              '</td><td class="name">' +
+              esc(c.name) +
+              '</td><td class="role">' +
+              esc(c.role || "") +
+              "</td></tr>";
+          }
+          html += "</table>";
+        }
+        root.innerHTML = html;
+      }
+      render();
+
+      const wk = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live;
+      const wv = window.chrome && window.chrome.webview;
+      function close() {
+        const msg = { method: "close_and_send", params: [JSON.stringify({ ok: true })] };
+        if (wk) wk.postMessage(msg);
+        else if (wv) wv.postMessage(msg);
+      }
+      document.getElementById("close").addEventListener("click", close);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" || e.key === "Enter") close();
+      });
+    </script>
+  </body>
+</html>

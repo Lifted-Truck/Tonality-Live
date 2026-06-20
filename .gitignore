@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.ablx
+.env
+__pycache__/
+*.pyc
+
+# Beta SDK tarballs are not redistributable — keep them out of version control.
+extension/vendor/*.tgz
