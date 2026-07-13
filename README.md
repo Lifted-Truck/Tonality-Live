@@ -1,7 +1,8 @@
 # Tonality for Ableton Live
 
 An Ableton Live **Extension** (`.ablx`) that analyzes and alters MIDI clips using
-the [Tonality](../Tonality) music-theory engine.
+the [Tonality](https://github.com/Lifted-Truck/Tonality) music-theory engine
+(the `mts` Python package — see [step 1 of Build & run](#build--run-once-the-sdk-is-in-place) to install it).
 
 Right-click a MIDI clip:
 
@@ -30,32 +31,55 @@ Ableton Live  ──▶  extension/ (TypeScript, .ablx)
 
 ## Status & prerequisites
 
-This repo is **authored but not yet built** — the build step needs the beta SDK,
-which can't be committed. On this machine:
+Two things you must supply yourself before this runs — neither can be committed:
+
+- **The Tonality engine** (the `mts` Python package) — the bridge imports it.
+  Install it (step 1 below); it is **not** bundled here.
+- **The Ableton Extensions SDK** — a beta-gated distribution (not on npm). Get it
+  via the Ableton Beta Program (Centercode), unpack the archive, and drop its
+  three `*.tgz` tarballs into [`extension/vendor/`](extension/vendor/README.md).
+  `npm install` resolves them via the `file:./vendor/...` paths in
+  `extension/package.json`.
+
+On this machine:
 
 - ✅ Ableton Live 12 Beta installed (Extension Host present)
+- ✅ Extensions SDK vendored; extension builds (`npm run build` → `dist/extension.js`)
 - ✅ Tonality engine + venv (`mts` importable) — the bridge is verified working
-- ⚠️ Node `v24.10.0`; the SDK pins `>=24.14.1` — bump Node before building
-- ❌ **Extensions SDK not downloaded** — get it via the Ableton Beta Program
-  (Centercode), unpack it, and drop the three tarballs into
-  [`extension/vendor/`](extension/vendor/README.md)
+- ⚠️ Node `v24.10.0`; the SDK pins `>=24.14.1` — only an `EBADENGINE` warning
+  today, but bump Node if the Extension Host misbehaves
 
 ## Build & run (once the SDK is in place)
 
-1. Enable **Developer Mode** in Live → *Preferences → Extensions*.
-2. Start the bridge (keep it running):
+1. **Install the Tonality engine** (Python ≥ 3.10). The bridge needs `mts`
+   importable; there is no PyPI release, so clone it and install editable into
+   its own venv:
    ```bash
-   /Users/machinepriest/Documents/Tonality/.venv/bin/python3.13 bridge/server.py
+   git clone git@github.com:Lifted-Truck/Tonality.git   # or https://github.com/Lifted-Truck/Tonality.git
+   cd Tonality
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -e .            # pulls in mido; that's the only runtime dep
+   python -c "import mts; print('mts OK')"
    ```
-3. Build + load the extension into Live:
+   Note the venv's python path — you point the bridge at it in step 3. If you
+   clone Tonality somewhere other than `~/Documents/Tonality`, set
+   `TONALITY_REPO=/path/to/Tonality` so the bridge finds the source tree.
+2. Enable **Developer Mode** in Live → *Preferences → Extensions*.
+3. Start the bridge with the Tonality venv's python (keep it running):
+   ```bash
+   /path/to/Tonality/.venv/bin/python3 bridge/server.py
+   # then verify:  curl -s localhost:8765/health   → {"ok": true, "mts": "..."}
+   ```
+4. Build + load the extension into Live:
    ```bash
    cd extension
    cp .env.example .env        # EXTENSION_HOST_PATH is pre-filled for this Mac
    npm install                 # needs vendor/*.tgz present
    npm start                   # builds, loads into Live's Extension Host
    ```
-4. Right-click a MIDI clip in Live → **Analyze with Tonality**.
-5. Package a distributable: `npm run package` → `dist/*.ablx`.
+5. Right-click a MIDI clip in Live → **Analyze with Tonality**.
+6. Package a distributable: `npm run package` → `dist/*.ablx`.
 
 Logs (incl. `console.log`) go to Live's `ExtensionHost.txt`
 (`~/Library/Preferences/Ableton/Live <ver>/ExtensionHost.txt` on macOS).

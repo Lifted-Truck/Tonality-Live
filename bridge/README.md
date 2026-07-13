@@ -5,14 +5,35 @@ Ableton extension (TypeScript, no Python) can use it. It rebuilds a Tonality
 `Sequence` from a clip's notes and runs the same tested pipeline the MCP endpoint
 uses (`mts.mcp.tools.midi_file_analysis`).
 
+## Install Tonality first
+
+The bridge imports `mts`, so the Tonality engine must be installed. There is no
+PyPI release — clone the repo and install it editable into its own venv
+(Python ≥ 3.10):
+
+```bash
+git clone git@github.com:Lifted-Truck/Tonality.git   # or https://…
+cd Tonality
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .            # mido is the only runtime dep
+```
+
 ## Run it
 
 It needs `mts` on the import path, so run it with the **Tonality venv** — no
-extra installs:
+extra installs beyond that:
 
 ```bash
-/Users/machinepriest/Documents/Tonality/.venv/bin/python3.13 \
-    /Users/machinepriest/Documents/Tonality-Live/bridge/server.py
+/path/to/Tonality/.venv/bin/python3 \
+    /path/to/Tonality-Live/bridge/server.py
+```
+
+The bridge prepends the Tonality source tree to `sys.path`, defaulting to
+`~/Documents/Tonality`. If your clone lives elsewhere, point it there:
+
+```bash
+TONALITY_REPO=/path/to/Tonality /path/to/Tonality/.venv/bin/python3 bridge/server.py
 ```
 
 Listens on `http://127.0.0.1:8765` (override with `TONALITY_BRIDGE_HOST` /
