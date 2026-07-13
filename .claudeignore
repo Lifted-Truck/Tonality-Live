@@ -1,0 +1,7 @@
+# Keep bulky / generated / binary paths out of agent context.
+extension/node_modules/
+extension/dist/
+extension/vendor/*.tgz
+**/__pycache__/
+.harness/
+*.ablx

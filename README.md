@@ -90,3 +90,22 @@ v1 ships analysis end-to-end plus transpose. The next "alter" features
 (fit-to-key, scale-conform, revoice) need new transform functions in the
 Tonality engine first — they hang off the bridge's `/transform` seam. See
 [bridge/README.md](bridge/README.md#the-transform-seam).
+
+<!-- HARNESS:START — added by /retrofit (idempotent); edits go between the markers -->
+## Development harness
+
+This repo carries the standard agent harness. Orientation for a contributor
+(human or agent) without code-diving:
+
+- **[ROADMAP.md](ROADMAP.md)** — single source of truth: what's next, the
+  test-coverage debt (Q-002), the `/transform` seam blocked on Tonality (Q-003).
+- **[CLAUDE.md](CLAUDE.md)** — the charter; §Domain holds the invariants
+  (chiefly: *no music theory lives here* — it stays in the Tonality engine).
+- **[CODEMAP.md](CODEMAP.md)** — where everything lives.
+- **[DECISIONS.md](DECISIONS.md)** — what's already settled.
+- **`./verify fast | full | report`** — the oracle. `fast` = typecheck +
+  Python compile-check; `full` also builds the bundle and contract-checks the
+  bridge (skipped-with-notice when the Tonality engine is absent).
+
+_Last verified: 2026-07-13 — `./verify fast` green; retrofit at architecture rung 1._
+<!-- HARNESS:END -->

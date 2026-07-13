@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# verify — oracle dispatcher. The harness's only interface to project QC.
+# Usage: ./verify fast | full | report
+# Contract: exit 0 = green, nonzero = red. Writes .harness/last-verify.json.
+#
+# This project is a thin client (TypeScript .ablx extension) + a dependency-free
+# Python bridge that consumes the Tonality (mts) engine over HTTP. The oracle
+# WRAPS the commands that already gate the build; it invents no new test setup.
+# Writing real unit suites (vitest for transpose, pytest for the bridge marshal)
+# is tracked in ROADMAP as debt, not silently gated on here.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+TARGET="${1:-fast}"
+HARNESS_DIR=".harness"
+mkdir -p "$HARNESS_DIR"
+
+BRIDGE_URL="${TONALITY_BRIDGE_URL:-http://127.0.0.1:8765}"
+
+record() { # record <target> <exit_code>
+  local git_hash; git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "no-git")
+  printf '{"target":"%s","exit":%d,"git":"%s","ts":"%s"}\n' \
+    "$1" "$2" "$git_hash" "$(date -u +%FT%TZ)" > "$HARNESS_DIR/last-verify.json"
+  rm -f "$HARNESS_DIR/dirty"
+  return "$2"
+}
+
+fast() {
+  # ---- Layer-0: seconds, not minutes. CI-blocking. -------------------------
+  # 1) TypeScript typecheck — the check that already fronts every build.
+  echo "verify[fast]: tsc --noEmit (extension/)"
+  if [ -d extension/node_modules ]; then
+    ( cd extension && npx --no-install tsc --noEmit ) || return 1
+  else
+    echo "  SKIP: extension/node_modules absent — run 'cd extension && npm install' first" >&2
+    echo "  (typecheck is the load-bearing gate; not skipping silently on CI)" >&2
+    return 1
+  fi
+  # 2) Python bridge compiles (syntax/import-time errors are a real red).
+  echo "verify[fast]: py_compile bridge/server.py"
+  python3 -m py_compile bridge/server.py || return 1
+  echo "verify[fast]: OK"
+  return 0
+}
+
+full() {
+  fast || return $?
+  # ---- Layer-E: the whole gate. Run before closing a queue item. -----------
+  # 3) Production bundle actually builds (esbuild via build.ts).
+  echo "verify[full]: npm run build (extension/)"
+  ( cd extension && npm run build ) || return 1
+
+  # 4) Live bridge contract — degrade VISIBLY when the Tonality engine is
+  #    absent (rule 2). A machine without the venv is not a red; a reachable
+  #    bridge returning a wrong shape IS.
+  echo "verify[full]: bridge contract @ $BRIDGE_URL"
+  local health
+  health=$(curl -sf --max-time 3 "$BRIDGE_URL/health" 2>/dev/null) || {
+    echo "  SKIP: bridge not reachable at $BRIDGE_URL — start it with the Tonality venv" >&2
+    echo "  (degraded per INTEGRATIONS rule 2; not a red)" >&2
+    echo "verify[full]: OK (bridge check skipped)"
+    return 0
+  }
+  echo "  /health -> $health"
+  local analysis
+  analysis=$(curl -sf --max-time 5 -X POST "$BRIDGE_URL/analyze" \
+    -H 'Content-Type: application/json' \
+    -d '{"bpm":120,"notes":[{"pitch":60,"startTime":0,"duration":1},{"pitch":64,"startTime":0,"duration":1},{"pitch":67,"startTime":0,"duration":1}]}' 2>/dev/null) || {
+    echo "  FAIL: /analyze did not respond 2xx while bridge was up" >&2
+    return 1
+  }
+  # Contract: response carries a 'summary' object (see extension/src/bridge.ts).
+  printf '%s' "$analysis" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d.get("summary"),dict), "no summary in /analyze response"; print("  /analyze -> summary present:", list(d["summary"].keys()))' || {
+    echo "  FAIL: /analyze response missing expected 'summary' contract" >&2
+    return 1
+  }
+  echo "verify[full]: OK"
+  return 0
+}
+
+case "$TARGET" in
+  fast)   fast;  record fast  $? ;;
+  full)   full;  record full  $? ;;
+  report) cat "$HARNESS_DIR/last-verify.json" 2>/dev/null || { echo '{"target":null,"exit":null}'; exit 1; } ;;
+  *)      echo "usage: ./verify fast|full|report" >&2; exit 64 ;;
+esac

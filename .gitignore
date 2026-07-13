@@ -7,3 +7,8 @@ __pycache__/
 
 # Beta SDK tarballs are not redistributable — keep them out of version control.
 extension/vendor/*.tgz
+
+# HARNESS:START — added by /retrofit (idempotent). Machine state + local overrides.
+.harness/
+.claude/settings.local.json
+# HARNESS:END

@@ -1,0 +1,42 @@
+{
+  "schema": "project-manifest.0 (draft — kit v2 will formalize)",
+  "status": "RETROFIT — provisional, awaiting user ratification 2026-07-13",
+  "survey": {
+    "what_is_it": "app/extension — Ableton Live 12 extension (.ablx) that analyzes & transposes MIDI clips; consumes the Tonality (mts) engine via a local dependency-free Python HTTP bridge",
+    "architecture_rung": {
+      "choice": 1,
+      "menu": [
+        "1: single thread",
+        "2: thread + subagents/verifier",
+        "3: organ fleet"
+      ],
+      "earned_by": "~411 LOC thin client + bridge, single developer, no parallelizable verifiable work; subagents' ~7-15x token cost is unjustified. Human-selected, not defaulted."
+    },
+    "domain_core_llm_must_not_own": "The music-theory core is NOT in this repo — it lives in Tonality (mts). Per INTEGRATIONS rule 3 this repo must never reimplement it. Local deterministic logic is limited to MIDI transpose (pure arithmetic + 0-127 clamp, extension/src/transform.ts) and JSON<->Sequence marshalling in bridge/server.py. Nothing AI-driven in the runtime path.",
+    "oracle_shape": {
+      "goldens": "invariants + smoke — no pinned goldens yet (transpose + bridge-marshal unit suites tracked as debt, ROADMAP Q-002)",
+      "ci": "single-version smoke: tsc --noEmit + py_compile (fast); + esbuild build + live bridge /health+/analyze contract, skipped-with-notice when the engine is absent (full)"
+    },
+    "second_implementation": false,
+    "consumers_and_providers": {
+      "consumes": [
+        "Tonality (mts) — via bridge import (from mts.mcp.tools import midi_file_analysis); the /transform seam is a documented gap, brief filed"
+      ],
+      "consumed_by": [
+        "the owner, inside Ableton Live 12 Beta"
+      ]
+    },
+    "parallel_audit_thread": false,
+    "knowledge_loop_tags": [
+      "ableton-sdk-quirks",
+      "bridge-contract",
+      "extension-lifecycle",
+      "tonality-integration",
+      "macos-build-codesign"
+    ],
+    "lifespan_autonomy": {
+      "lifespan": "long-lived (maintained personal tool)",
+      "autonomy_tier": "interactive — agents propose, human ratifies at gates; no unattended runs"
+    }
+  }
+}
