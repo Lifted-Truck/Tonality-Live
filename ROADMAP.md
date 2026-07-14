@@ -11,8 +11,8 @@ State lives here; conversations are ephemeral.
   `full` adds `npm run build` + a live bridge `/health`+`/analyze` contract
   check (skipped-with-notice when the Tonality engine is absent). **Gaps:** no
   unit suites (transpose, bridge marshalling), no pinned goldens — see Q-002.
-- **Last human ratification:** manifest provisional, awaiting ratification
-  (retrofit 2026-07-13).
+- **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1);
+  push permission gated on a green oracle (DECISIONS D3, D4).
 
 ## Invariants under active protection
 

@@ -4,6 +4,32 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D4 — 2026-07-13 — Push permission gated on a green oracle (not a blanket deny)
+
+- **Decision:** Replace the harness's blanket `Bash(git push*)` deny with a
+  conditional gate: `git push` is allow-listed, but a PreToolUse hook
+  (`.claude/hooks/pretool-push-gate.sh`) blocks it unless
+  `.harness/last-verify.json` shows `exit == 0`. Force-push stays denied.
+- **Why:** The human authorized auto-push "once the CI is green." This
+  project's CI is the `./verify` oracle, so the gate is deterministic and
+  hook-enforced (doctrine: freeze/permission is enforced by hooks, never
+  prose), not a human prompt every time. Green-before-publish is preserved;
+  the friction of a prompt on every push is removed.
+- **Scope:** `.claude/settings.json` (allow/deny + hook wiring), new hook.
+  Force-push and `reset --hard` remain denied.
+- **Follow-up:** no GitHub Actions workflow exists yet; if one is added later,
+  fold its status into (or alongside) this gate. Tracked informally, not a
+  queue item until wanted.
+- **Trace:** traces/2026-07-13-ratify-and-push-policy.md
+
+## D3 — 2026-07-13 — Manifest ratified
+
+- **Decision:** `project.manifest.json` is RATIFIED (was provisional). The
+  human confirmed the survey answers, architecture **rung 1** included.
+- **Why:** Closes the retrofit's open ratification gate; the manifest is now
+  the settled source for this project's shape.
+- **Trace:** traces/2026-07-13-ratify-and-push-policy.md
+
 ## D2 — 2026-07-13 — Push the retrofit to the remote
 
 - **Decision:** Publish the harness-retrofit commit (D1) to

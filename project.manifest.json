@@ -1,6 +1,6 @@
 {
   "schema": "project-manifest.0 (draft — kit v2 will formalize)",
-  "status": "RETROFIT — provisional, awaiting user ratification 2026-07-13",
+  "status": "RETROFIT — RATIFIED 2026-07-13 (user go-ahead; architecture rung 1 confirmed)",
   "survey": {
     "what_is_it": "app/extension — Ableton Live 12 extension (.ablx) that analyzes & transposes MIDI clips; consumes the Tonality (mts) engine via a local dependency-free Python HTTP bridge",
     "architecture_rung": {
