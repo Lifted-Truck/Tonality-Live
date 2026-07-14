@@ -4,6 +4,18 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D2 — 2026-07-13 — Push the retrofit to the remote
+
+- **Decision:** Publish the harness-retrofit commit (D1) to
+  `github.com/Lifted-Truck/Tonality-Live` (branch `main`). The human added
+  the push to the plan and authorized it explicitly.
+- **Why:** The remote already exists and was pushed to for the prior README
+  change; keeping the harness commit local-only would leave the published
+  repo mid-retrofit. Manifest remains provisional (D1) — ratification of the
+  survey answers is tracked separately and is not blocked by publishing.
+- **Scope:** `git push origin main` only; no force, no history rewrite.
+- **Trace:** traces/2026-07-13-push.md (cites the retrofit trace)
+
 ## D1 — 2026-07-13 — Retrofit the ecosystem harness at architecture rung 1
 
 - **Decision:** Adopt the standard agent harness (CLAUDE.md charter, `./verify`
