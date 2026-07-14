@@ -7,10 +7,11 @@ State lives here; conversations are ephemeral.
 
 - **Phase:** shipped-v1 / hardening. v1 (analysis end-to-end + transpose) is
   authored and builds; the harness was retrofitted 2026-07-13.
-- **Oracle:** `./verify fast` = `tsc --noEmit` + `py_compile bridge/server.py`.
-  `full` adds `npm run build` + a live bridge `/health`+`/analyze` contract
-  check (skipped-with-notice when the Tonality engine is absent). **Gaps:** no
-  unit suites (transpose, bridge marshalling), no pinned goldens — see Q-002.
+- **Oracle:** `./verify fast` = `tsc --noEmit` + 7 `transpose` unit tests
+  (node:test) + `py_compile`. `full` adds `npm run build` + 9 bridge glue
+  tests (unittest; skip when the engine is absent) + a live bridge
+  `/health`+`/analyze` contract check (skipped-with-notice when absent).
+  **Remaining gap:** no end-to-end test in a live Ableton (out of scope).
 - **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1);
   push permission gated on a green oracle (DECISIONS D3, D4).
 
@@ -37,17 +38,25 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Out of scope:** any change to extension/ or bridge/ source.
 
 ### Q-002 — Real oracle coverage (test-suite debt)
-- **Status:** open
-- **Scope:** `extension/` (add vitest), `bridge/` (add pytest), `./verify`.
+- **Status:** done (trace: traces/2026-07-13-q002-tests.md)
+- **Scope:** `extension/src/transform.test.ts`, `bridge/test_bridge.py`, `./verify`.
 - **Acceptance criteria:**
-  1. `transpose` unit tests: shift correctness + MIDI 0–127 clamp/drop
-     (`extension/src/transform.ts`); wired into `fast`.
-  2. Bridge JSON⇄Sequence marshalling test with a pinned golden `/analyze`
-     response for the C-E-G fixture; wired into `full`.
-  3. Adding a dependency (vitest / pytest) is a human-gated decision — get
-     approval before wiring.
-- **Out of scope:** end-to-end tests requiring a running Ableton Live.
-- **Open questions:** vitest vs node:test for the extension? (ask human)
+  1. ✅ `transpose` unit tests: shift correctness + MIDI 0–127 clamp/drop
+     (`extension/src/transform.ts`); wired into `fast`. — 7 tests, node:test.
+  2. ✅ Bridge marshalling + summary-shaping tests with pinned goldens; wired
+     into `full`. — 9 tests, stdlib unittest. **Honest re-scope:** the golden
+     pins the bridge's own `_summarize`/`_chord_label` shaping over a
+     representative mts-shaped result, and `_sequence_from_payload` validation
+     — NOT a golden of mts's analysis (that is the provider's domain and would
+     violate the no-theory-here invariant, INTEGRATIONS rule 3).
+  3. ✅ Dependency gate: resolved by choosing a **zero-dependency** stack
+     (node:test + tsx, stdlib unittest), so no dependency was added — the
+     human gate was satisfied by not needing it.
+- **Out of scope:** end-to-end tests requiring a running Ableton Live; testing
+  mts's analysis correctness (provider owns that).
+- **Resolved:** test framework = zero-dep (node:test / unittest), per human
+  decision 2026-07-13. Bridge tests SKIP (not fail) when the engine is absent,
+  matching `full`'s degrade-visibly contract.
 
 ### Q-003 — Theory-driven alters via the /transform seam (blocked on Tonality)
 - **Status:** blocked (upstream) — brief filed: see
@@ -67,6 +76,11 @@ theory in this repo** — theory-driven alters go through the bridge's
 ## Decision log
 
 <!-- One line per ratified decision, newest first, linking to traces/. -->
+- 2026-07-13 — Q-002 closed: zero-dep test suites (node:test + unittest)
+  wired into the oracle; 7 extension + 9 bridge tests green. (trace:
+  traces/2026-07-13-q002-tests.md)
+- 2026-07-13 — Manifest ratified (rung 1); push gated on a green oracle.
+  (DECISIONS D3, D4; trace: traces/2026-07-13-ratify-and-push-policy.md)
 - 2026-07-13 — Harness retrofitted at rung 1 (single thread); oracle wraps
   tsc + py_compile + build + bridge smoke; consumer brief filed to Tonality
   for the /transform functions. (trace: traces/2026-07-13-retrofit.md)

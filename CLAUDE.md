@@ -105,11 +105,13 @@ binaries); `extension/manifest.json` and the extension's public command IDs
 (`tonality.analyzeClip`, `tonality.transpose`) — public interface; the bridge's
 HTTP contract (`/health`, `/analyze`, `/transform`) shared with `mts`.
 
-**Verify targets.** `fast` (~seconds): `tsc --noEmit` + `py_compile
-bridge/server.py`. `full` (~10–20s): fast + `npm run build` + a live
-`/health`+`/analyze` contract check against the bridge, **skipped-with-notice**
-when the Tonality venv/bridge is unreachable (degraded, not red). No pinned
-goldens or unit suites yet — tracked as debt in ROADMAP.
+**Verify targets.** `fast` (~seconds): `tsc --noEmit` + `transpose` unit tests
+(node:test via tsx) + `py_compile`. `full` (~10–20s): fast + `npm run build` +
+bridge glue tests (stdlib unittest — marshalling + summary shaping; **skip**
+when the engine is absent) + a live `/health`+`/analyze` contract check,
+**skipped-with-notice** when the Tonality venv/bridge is unreachable (degraded,
+not red). Test stack is zero-dependency by decision. Remaining gap: no
+end-to-end test inside a live Ableton (out of scope).
 
 <!-- KNOWLEDGE-LOOP:START -->
 ## Self-Improving Knowledge Loop

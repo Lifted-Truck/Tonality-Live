@@ -9,3 +9,4 @@ pull only the matching LIBRARY.md entries into context. One line per lesson.
 ## Lessons
 
 - [L0001] Vendored beta SDK unblocks the build; Node pin is a soft warning — `macos-build-codesign`, `ableton-sdk-quirks` (candidate)
+- [L0002] Zero-dep TS+Python tests: node:test via tsx works because transform.ts's SDK import is type-only; bridge tests skipUnless mts importable — `bridge-contract`, `extension-lifecycle` (candidate)

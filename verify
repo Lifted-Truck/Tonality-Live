@@ -31,16 +31,27 @@ fast() {
   # ---- Layer-0: seconds, not minutes. CI-blocking. -------------------------
   # 1) TypeScript typecheck — the check that already fronts every build.
   echo "verify[fast]: tsc --noEmit (extension/)"
-  if [ -d extension/node_modules ]; then
-    ( cd extension && npx --no-install tsc --noEmit ) || return 1
-  else
+  if [ ! -d extension/node_modules ]; then
     echo "  SKIP: extension/node_modules absent — run 'cd extension && npm install' first" >&2
     echo "  (typecheck is the load-bearing gate; not skipping silently on CI)" >&2
     return 1
   fi
-  # 2) Python bridge compiles (syntax/import-time errors are a real red).
-  echo "verify[fast]: py_compile bridge/server.py"
-  python3 -m py_compile bridge/server.py || return 1
+  ( cd extension && npx --no-install tsc --noEmit ) || return 1
+
+  # 2) transpose unit tests — pure arithmetic, node:test via tsx, zero new deps.
+  echo "verify[fast]: node:test (extension/)"
+  local specs
+  specs=$(cd extension && find src -name '*.test.ts' 2>/dev/null)
+  if [ -n "$specs" ]; then
+    # shellcheck disable=SC2086  # word-splitting $specs into multiple file args is intended
+    ( cd extension && node --import tsx --test $specs ) || return 1
+  else
+    echo "  (no *.test.ts found)"
+  fi
+
+  # 3) Python sources compile (syntax/import-time errors are a real red).
+  echo "verify[fast]: py_compile bridge/*.py"
+  python3 -m py_compile bridge/server.py bridge/test_bridge.py || return 1
   echo "verify[fast]: OK"
   return 0
 }
@@ -52,7 +63,17 @@ full() {
   echo "verify[full]: npm run build (extension/)"
   ( cd extension && npm run build ) || return 1
 
-  # 4) Live bridge contract — degrade VISIBLY when the Tonality engine is
+  # 4) Bridge glue unit tests (marshalling + summary shaping). These need the
+  #    Tonality engine importable, so they SKIP (not fail) when it's absent —
+  #    prefer the Tonality venv's python, which has mts + mido.
+  echo "verify[full]: bridge unit tests"
+  local repo pyv
+  repo="${TONALITY_REPO:-$HOME/Documents/Tonality}"
+  pyv="$repo/.venv/bin/python3"
+  [ -x "$pyv" ] || pyv="python3"
+  TONALITY_REPO="$repo" "$pyv" -m unittest bridge.test_bridge || return 1
+
+  # 5) Live bridge contract — degrade VISIBLY when the Tonality engine is
   #    absent (rule 2). A machine without the venv is not a red; a reachable
   #    bridge returning a wrong shape IS.
   echo "verify[full]: bridge contract @ $BRIDGE_URL"

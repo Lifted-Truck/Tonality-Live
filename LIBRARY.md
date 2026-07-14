@@ -23,3 +23,22 @@ unverified). Entry format:
 | falsifier: a future SDK bump makes engine-strict fatal, OR the Extension
   Host refuses to load a bundle built on Node < 24.14.1.
 | supersedes: —
+
+[L0002] Zero-dependency test suites for both subsystems
+| tier: candidate | added: 2026-07-13
+| tags: bridge-contract, extension-lifecycle
+| lesson: The repo tests with NO new deps. Extension: `node --import tsx
+  --test src/**/*.test.ts` runs TypeScript unit tests because
+  extension/src/transform.ts imports NoteDescription as `import type` (erased
+  at runtime) — so transpose() loads with no SDK runtime. Test files live under
+  src/ (type-checked by `tsc --noEmit`, which is fine) but never bundle:
+  build.ts entryPoints is only extension.ts. Bridge: stdlib `unittest`, and
+  every test class is `@unittest.skipUnless(mts importable)` so it degrades
+  (skips, exit 0) when the engine is absent — mirroring `./verify full`. Run
+  bridge tests with the Tonality venv python to actually exercise them.
+| evidence: extension/src/transform.test.ts (7) + bridge/test_bridge.py (9)
+  green via `./verify full` 2026-07-13; tsc stays green with test files included.
+| falsifier: a local transform that imports a RUNTIME value from the SDK would
+  break the tsx-only extension test (needs the SDK bundled/mocked); or moving
+  test files out of src/ would drop them from the typecheck.
+| supersedes: —
