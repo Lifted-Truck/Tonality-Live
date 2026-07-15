@@ -10,8 +10,8 @@ Intelligence stays in ``mts`` — this file is glue: JSON <-> Sequence, nothing 
 No third-party deps: it runs on the Tonality venv (where ``mts`` is importable)
 with the standard library only.
 
-    /Users/machinepriest/Documents/Tonality/.venv/bin/python3.13 \
-        /Users/machinepriest/Documents/Tonality-Live/bridge/server.py
+    ~/Documents/Tonality/.venv/bin/python3.13 \
+        ~/Documents/Tonality-Live/bridge/server.py
 
 Endpoints
     GET  /health     -> {"ok": true, "mts": "<version>"}
@@ -30,8 +30,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # Use the live engine source, not whatever (possibly stale) copy is installed in
 # the venv's site-packages. Prepend the Tonality repo root so `import mts`
 # resolves to the working tree regardless of the cwd we're launched from.
-_TONALITY_REPO = os.environ.get(
-    "TONALITY_REPO", "/Users/machinepriest/Documents/Tonality"
+_TONALITY_REPO = os.path.expanduser(
+    os.environ.get("TONALITY_REPO", "~/Documents/Tonality")
 )
 if os.path.isdir(os.path.join(_TONALITY_REPO, "mts")):
     sys.path.insert(0, _TONALITY_REPO)
