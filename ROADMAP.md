@@ -12,8 +12,9 @@ State lives here; conversations are ephemeral.
   tests (unittest; skip when the engine is absent) + a live bridge
   `/health`+`/analyze` contract check (skipped-with-notice when absent).
   **Remaining gap:** no end-to-end test in a live Ableton (out of scope).
-- **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1);
-  push permission gated on a green oracle (DECISIONS D3, D4).
+- **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1); push
+  gated on a green oracle (D3, D4); Q-003 provider confirmed as the Python
+  engine and Tonality's rulings ratified (D5, D6).
 
 ## Invariants under active protection
 
@@ -58,24 +59,37 @@ theory in this repo** — theory-driven alters go through the bridge's
   decision 2026-07-13. Bridge tests SKIP (not fail) when the engine is absent,
   matching `full`'s degrade-visibly contract.
 
-### Q-003 — Theory-driven alters via the /transform seam (blocked on Tonality)
-- **Status:** blocked (upstream) — brief filed: see
-  `~/Documents/Tonality/integrations/Tonality-Live/brief.md`
+### Q-003 — Scale-conform via the /transform seam (blocked on Tonality)
+- **Status:** blocked (upstream) — **rulings ratified 2026-07-13; awaiting the
+  provider's implementation notice.** Exchange:
+  `~/Documents/Tonality/integrations/Tonality-Live/{brief,response,ratify}.md`
+  (ball: provider).
+- **Provider is the Python engine (`mts`), not `tonality-core`** — see DECISIONS D6.
 - **Scope:** `bridge/server.py` (`/transform` endpoint, currently 501),
-  `extension/src/` (new context-menu actions).
+  `extension/src/` (new context-menu action), `./verify` (contract check).
 - **Acceptance criteria:**
-  1. `mts` ships fit-to-key / scale-conform / revoice transform functions
-     (upstream — provider-owned, per the brief).
+  1. `mts` ships `conform_to_scale` + the `fit_to_key` wrapper (upstream,
+     provider-owned; register-preserving, generative-side per their rulings).
   2. `/transform` returns altered notes in the same `NoteDescription` shape
-     `/analyze` consumes; `full` gains a contract check.
-  3. New alters written back as one undo step (`withinTransaction`).
-- **Out of scope:** implementing the theory locally (violates the core
-  invariant). This item cannot start until the upstream brief is answered.
-- **Open questions:** owned by the brief's `respond-by`.
+     `/analyze` consumes; `full` gains a `/transform` contract check with the
+     same skip-when-engine-absent behavior.
+  3. New alter written back as one undo step (`withinTransaction`).
+  4. Whatever the provider rules on pitch collisions (dedupe vs
+     preserve-and-document) is honored; if they choose preserve, clip-hygiene
+     dedupe may live here (that is not theory).
+- **Out of scope:** implementing the snap locally — violates the no-theory-here
+  invariant, under any schedule pressure. Also out: `revoice`, deferred by the
+  provider to their Phase 7; `/transform` stays a visible 501 for it.
+- **Open questions (with the provider):** the `tie_break` default — it governs
+  every accidental in diatonic use, not a rare gap (C major: 5/5 out-of-scale
+  pcs tie); and the collision ruling. Both raised in `ratify.md`.
 
 ## Decision log
 
 <!-- One line per ratified decision, newest first, linking to traces/. -->
+- 2026-07-13 — Q-003 rulings ratified with two refinements (tie-break default,
+  collision ruling); provider confirmed as the Python engine, not tonality-core.
+  (DECISIONS D5, D6; trace: traces/2026-07-13-ratify-q003.md)
 - 2026-07-13 — Q-002 closed: zero-dep test suites (node:test + unittest)
   wired into the oracle; 7 extension + 9 bridge tests green. (trace:
   traces/2026-07-13-q002-tests.md)

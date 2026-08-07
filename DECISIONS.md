@@ -4,6 +4,54 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D6 — 2026-07-13 — The Python engine (`mts`) is Q-003's provider, NOT `tonality-core`
+
+- **Decision:** Tonality-Live's provider is the pure-Python Tonality engine
+  (`mts`, `~/Documents/Tonality`). `tonality-core` (the C++ repo) is **not** a
+  candidate for this repo's needs and no work is planned against it.
+- **Why (evidence, not preference):**
+  - `tonality-core/README.md` — "The pure-Python engine remains a fully-functional
+    peer and **the spec's source of truth**"; its scope is "deliberately the frozen
+    kernel": only the 4096-row set-class identity substrate. "The analysis,
+    temporal, rules, search, and pattern layers of the engine stay Python-only
+    until they freeze."
+  - Its entire public surface is `bitmask/chirality/dft/json_format/setclass/table`
+    headers — no key induction, no chord naming, no scale conform.
+  - `Tonality/CPP_PORT.md:79-83` lists "the MCP/**bridge tool surfaces**" as
+    *deferred behind the Phase 6 fence* — i.e. exactly the surface this repo
+    consumes.
+  - `Tonality/ROADMAP.md:1704` already records our request as Phase 7
+    "note-transform slice 0, accepted from Tonality-Live brief-001", generative-side.
+- **What would change it:** only a different product shape — running inside the
+  audio thread, or embedding the engine in the `.ablx` with no localhost service.
+  That needs Phase 6 plus the deferred analysis layer ported (provider sizing:
+  3–5 person-months for full parity).
+- **Trace:** traces/2026-07-13-ratify-q003.md
+
+## D5 — 2026-07-13 — Ratify Tonality's Q-003 rulings, with two musical refinements
+
+- **Decision:** Accept all five architecture rulings in
+  `Tonality/integrations/Tonality-Live/response.md` — generative-side homing; one
+  `conform_to_scale` primitive with a `fit_to_key` wrapper; register-preserving;
+  the two by-construction guarantees; `revoice` deferred to their Phase 7. Filed
+  `ratify.md` on the channel, returning the ball to the provider.
+- **Two refinements requested** (both musical, neither blocking the mechanism):
+  1. **Tie-break frequency.** Their Ruling 3 calls ties rare, citing harmonic
+     minor's augmented second — but that gap is 3 semitones (odd) and can never
+     tie. Ties need an *even* gap, and whole-tone gaps dominate diatonic scales.
+     Verified exhaustively: **C major 5/5 out-of-scale pcs tie**, whole-tone 6/6,
+     harmonic minor 3/5. So `tie_break="down"` governs every accidental, not a
+     corner case — asked them to choose the default deliberately.
+  2. **Pitch collisions.** Conform is many-to-one; accepted contract test 3
+     (preserve note count, change only pitch) therefore *keeps* duplicate
+     notes at identical pitch/onset/duration. Corroborated by their own
+     `ROADMAP.md:1711-1716` impossibility result ("a locality-preserving map is
+     necessarily partial wherever a step collapses"). Asked for an explicit
+     dedupe-or-document ruling.
+- **Not done:** no consumer-side implementation of the snap, under any schedule
+  pressure — that stays the invariant. `/transform` remains a visible 501.
+- **Trace:** traces/2026-07-13-ratify-q003.md
+
 ## D4 — 2026-07-13 — Push permission gated on a green oracle (not a blanket deny)
 
 - **Decision:** Replace the harness's blanket `Bash(git push*)` deny with a

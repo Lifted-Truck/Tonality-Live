@@ -42,3 +42,26 @@ unverified). Entry format:
   break the tsx-only extension test (needs the SDK bundled/mocked); or moving
   test files out of src/ would drop them from the typecheck.
 | supersedes: —
+
+[L0003] "tonality-core" is NOT this repo's engine — the Python `mts` is
+| tier: candidate | added: 2026-07-13
+| tags: tonality-integration, bridge-contract
+| lesson: There are two Tonality repos and the names invite the wrong choice.
+  `~/Documents/tonality-core` (C++) sounds canonical and even bills itself as
+  "the performance / generative / embedded main" — but it ports ONLY the frozen
+  set-class identity substrate (public headers: bitmask, chirality, dft,
+  json_format, setclass, table). It has no key induction, chord naming, or scale
+  conform. Its own README names the pure-Python engine as "the spec's source of
+  truth," and `Tonality/CPP_PORT.md:79-83` lists "the MCP/bridge tool surfaces"
+  — precisely what our bridge consumes — as DEFERRED behind the Phase 6 fence.
+  So Tonality-Live's provider is `~/Documents/Tonality` (the `mts` package), for
+  both /analyze and the future /transform. This is a designed stability fence,
+  not a backlog: expect tonality-core to stay unchanged as the engine grows.
+| evidence: tonality-core/README.md (scope + source-of-truth statements); its
+  include/tonality/ header list; Tonality/CPP_PORT.md:79-83 (deferred list);
+  Tonality/ROADMAP.md:1704 (our brief recorded as Phase 7 generative-side).
+| falsifier: Phase 6 freezes the 12-TET surface AND the analysis/bridge layers
+  get ported — or Tonality-Live changes shape (audio-thread or engine embedded
+  in the .ablx with no localhost bridge), which would make the C++ core the
+  right target.
+| supersedes: —
