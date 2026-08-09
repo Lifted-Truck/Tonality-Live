@@ -15,8 +15,15 @@ with the standard library only.
 
 Endpoints
     GET  /health     -> {"ok": true, "mts": "<version>"}
+    GET  /scales     -> {"scales": [{"name", "degrees"}, ...]}  (the engine's catalog)
     POST /analyze    -> body {notes, bpm?, timeSignature?} -> midi_file_analysis(...) + summary
-    POST /transform  -> 501 (seam for theory-driven alters: fit-to-key, revoice; see README)
+    POST /transform  -> body {op, notes, ...} -> {notes, report}  (fit_to_key | conform_to_scale)
+
+``/transform`` carries Phase-7 slice-0 conform (Tonality brief-001, response-2):
+the engine snaps out-of-scale pitch classes, register-preserving, and REPORTS
+rather than resolves snap-created collisions (ruling R2). Deduping those is clip
+hygiene and lives in the extension, not here. ``revoice`` is still absent
+upstream (their Phase 7 proper) and remains an explicit 501.
 """
 
 from __future__ import annotations
@@ -37,6 +44,8 @@ if os.path.isdir(os.path.join(_TONALITY_REPO, "mts")):
     sys.path.insert(0, _TONALITY_REPO)
 
 from mts.core.pitch import Pitch
+from mts.generate.conform import conform_to_scale, fit_to_key
+from mts.io.loaders import load_scales
 from mts.io.midi import sequence_to_midi_file
 from mts.mcp.tools import midi_file_analysis
 from mts.temporal import Event, Sequence
@@ -162,6 +171,87 @@ def analyze(payload: dict) -> dict:
     return result
 
 
+# --- transform (Phase-7 slice 0: conform) --------------------------------------
+
+def _notes_from_events(events: list) -> list[dict]:
+    """Engine canonical events -> the SDK ``NoteDescription`` shape, 1:1.
+
+    Canonical form is ``[onset_beats, duration_beats, midi, velocity, voice]``
+    (mts.generate.conform.ConformResult). ``voice`` has no NoteDescription
+    counterpart and is dropped — it is engine bookkeeping, not clip data.
+    """
+
+    return [
+        {
+            "pitch": int(midi),
+            "startTime": float(onset),
+            "duration": float(duration),
+            "velocity": int(velocity),
+        }
+        for onset, duration, midi, velocity, _voice in events
+    ]
+
+
+def transform(payload: dict) -> dict:
+    """notes JSON -> Sequence -> engine conform -> notes JSON + the engine's report.
+
+    Glue only: every musical decision (which scale member is nearest, how a tie
+    resolves, what counts as a collision) is the engine's. This function picks
+    the entry point, passes parameters through, and reshapes the note list.
+    """
+
+    op = payload.get("op")
+    sequence = _sequence_from_payload(payload)
+    tie_break = payload.get("tieBreak") or "previous"
+
+    if op == "fit_to_key":
+        if "tonicPc" not in payload:
+            raise ValueError("fit_to_key needs 'tonicPc' (0-11).")
+        result = fit_to_key(
+            sequence,
+            int(payload["tonicPc"]),
+            str(payload.get("mode") or "major"),
+            tie_break=tie_break,
+        )
+    elif op == "conform_to_scale":
+        scale = payload.get("scale")
+        if not scale:
+            raise ValueError("conform_to_scale needs 'scale' (catalog name or degree list).")
+        if "rootPc" not in payload:
+            raise ValueError("conform_to_scale needs 'rootPc' (0-11).")
+        result = conform_to_scale(
+            sequence, scale, int(payload["rootPc"]), tie_break=tie_break
+        )
+    elif op == "revoice":
+        # Deferred upstream to Tonality's Phase 7 proper — progression
+        # realization, not a snap. Stays a visible 501 (never faked locally).
+        raise NotImplementedError("revoice is not implemented in the engine yet")
+    else:
+        raise ValueError(
+            f"unknown op {op!r} — expected 'fit_to_key' or 'conform_to_scale'."
+        )
+
+    report = result.to_dict()
+    notes = _notes_from_events(report.pop("events"))
+    return {"notes": notes, "report": report}
+
+
+def scales() -> dict:
+    """The engine's scale catalog, for the extension's picker.
+
+    Served rather than hardcoded in the extension: the catalog is engine data,
+    and a copy in TypeScript would silently go stale when the engine adds a scale.
+    """
+
+    catalog = load_scales(None)
+    return {
+        "scales": [
+            {"name": name, "degrees": list(catalog[name].degrees)}
+            for name in sorted(catalog)
+        ]
+    }
+
+
 # --- HTTP plumbing -------------------------------------------------------------
 
 class _Handler(BaseHTTPRequestHandler):
@@ -184,6 +274,8 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
         if self.path == "/health":
             self._send(200, {"ok": True, "mts": _MTS_VERSION})
+        elif self.path == "/scales":
+            self._send(200, scales())
         else:
             self._send(404, {"error": f"no route for GET {self.path}"})
 
@@ -197,11 +289,12 @@ class _Handler(BaseHTTPRequestHandler):
             if self.path == "/analyze":
                 self._send(200, analyze(payload))
             elif self.path == "/transform":
-                # Seam for theory-driven alters (fit-to-key, revoice). These need
-                # new transform functions in mts first — see bridge/README.md.
-                self._send(501, {"error": "transform not implemented yet; see README"})
+                self._send(200, transform(payload))
             else:
                 self._send(404, {"error": f"no route for POST {self.path}"})
+        except NotImplementedError as exc:
+            # revoice: still absent upstream. Visible 501, never a local fake.
+            self._send(501, {"error": f"{exc}; see bridge/README.md"})
         except (ValueError, KeyError) as exc:
             self._send(400, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - surface engine errors to the client

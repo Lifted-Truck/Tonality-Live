@@ -8,6 +8,13 @@ Right-click a MIDI clip:
 
 - **Analyze with Tonality** → key, chords, and functional roles in a dialog.
 - **Transpose…** → shift the clip by N semitones (one undo step).
+- **Fit to Key…** → snap out-of-key notes to the nearest key note.
+- **Conform to Scale…** → the same, against any of the engine's 37 scales.
+
+The two conform actions are register-preserving (only the pitch-class moves) and
+each lands as one undo step. Where a note sits exactly between two scale notes —
+which in a major key is *every* out-of-key note — the tie resolves toward the
+previous note by default; you can force up or down in the dialog.
 
 ## How it fits together
 
@@ -86,10 +93,11 @@ Logs (incl. `console.log`) go to Live's `ExtensionHost.txt`
 
 ## Roadmap
 
-v1 ships analysis end-to-end plus transpose. The next "alter" features
-(fit-to-key, scale-conform, revoice) need new transform functions in the
-Tonality engine first — they hang off the bridge's `/transform` seam. See
-[bridge/README.md](bridge/README.md#the-transform-seam).
+v1 ships analysis end-to-end, transpose, and the conform family (fit-to-key /
+conform-to-scale) over the bridge's `/transform` seam. `revoice` is deferred
+upstream to Tonality's Phase 7 — it is progression realization, not a snap — and
+`/transform` returns a visible 501 for it. See
+[bridge/README.md](bridge/README.md).
 
 <!-- HARNESS:START — added by /retrofit (idempotent); edits go between the markers -->
 ## Development harness
@@ -107,5 +115,6 @@ This repo carries the standard agent harness. Orientation for a contributor
   Python compile-check; `full` also builds the bundle and contract-checks the
   bridge (skipped-with-notice when the Tonality engine is absent).
 
-_Last verified: 2026-07-13 — `./verify fast` green; retrofit at architecture rung 1._
+_Last verified: 2026-08-09 — `./verify full` green end-to-end against a live bridge
+(13 extension + 19 bridge tests; `/health` + `/analyze` + `/transform` contract checks)._
 <!-- HARNESS:END -->

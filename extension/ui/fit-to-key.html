@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --p-live-ui-bg: hsl(0, 0%, 21%);
+        --p-live-input-bg: hsl(0, 0%, 12%);
+        --p-live-text-primary: hsl(0, 0%, 71%);
+        --p-live-text-secondary: hsl(0, 0%, 41%);
+        --p-live-control-border: hsl(0, 0%, 7%);
+        --p-live-accent-primary: hsl(31, 100%, 67%);
+        --p-live-control-text--enabled: hsl(0, 0%, 7%);
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--p-live-ui-bg);
+        color: var(--p-live-text-primary);
+        font: 12px/1.5 -apple-system, "Segoe UI", sans-serif;
+      }
+      h1 { font-size: 13px; margin: 0 0 12px; }
+      label { display: block; margin-bottom: 6px; color: var(--p-live-text-secondary); }
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--p-live-input-bg);
+        color: var(--p-live-text-primary);
+        border: 1px solid var(--p-live-control-border);
+        border-radius: 3px;
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      .field { margin-bottom: 10px; }
+      .hint { color: var(--p-live-text-secondary); font-size: 11px; margin: 2px 0 0; }
+      .row { display: flex; gap: 8px; margin-top: 14px; }
+      button {
+        flex: 1;
+        border: none;
+        border-radius: 3px;
+        padding: 6px 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #ok { background: var(--p-live-accent-primary); color: var(--p-live-control-text--enabled); }
+      #cancel { background: var(--p-live-input-bg); color: var(--p-live-text-primary); }
+    </style>
+  </head>
+  <body>
+    <h1>Fit clip to key</h1>
+    <div class="field">
+      <label for="tonic">Key</label>
+      <select id="tonic" autofocus>
+        <option value="0">C</option><option value="1">C#/Db</option>
+        <option value="2">D</option><option value="3">D#/Eb</option>
+        <option value="4">E</option><option value="5">F</option>
+        <option value="6">F#/Gb</option><option value="7">G</option>
+        <option value="8">G#/Ab</option><option value="9">A</option>
+        <option value="10">A#/Bb</option><option value="11">B</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="major">Major</option>
+        <option value="minor">Minor (natural)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="tie">Ties resolve</label>
+      <select id="tie">
+        <option value="previous">Toward the previous note (default)</option>
+        <option value="down">Always down</option>
+        <option value="up">Always up</option>
+      </select>
+      <p class="hint">
+        In a major key every out-of-key note sits exactly between two key notes,
+        so this setting decides all of them.
+      </p>
+    </div>
+    <div class="row">
+      <button id="cancel">Cancel</button>
+      <button id="ok">Apply</button>
+    </div>
+    <script>
+      const wk = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live;
+      const wv = window.chrome && window.chrome.webview;
+      function send(result) {
+        const msg = { method: "close_and_send", params: [JSON.stringify(result)] };
+        if (wk) wk.postMessage(msg);
+        else if (wv) wv.postMessage(msg);
+      }
+      function apply() {
+        send({
+          tonicPc: parseInt(document.getElementById("tonic").value, 10),
+          mode: document.getElementById("mode").value,
+          tieBreak: document.getElementById("tie").value,
+        });
+      }
+      document.getElementById("ok").addEventListener("click", apply);
+      document.getElementById("cancel").addEventListener("click", () => send({ tonicPc: null }));
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") apply();
+        if (e.key === "Escape") send({ tonicPc: null });
+      });
+    </script>
+  </body>
+</html>

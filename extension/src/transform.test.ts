@@ -7,7 +7,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { transpose } from "./transform.js";
+import { dedupeCollisions, transpose } from "./transform.js";
+import type { Collision } from "./bridge.js";
 
 type Note = { pitch: number; startTime: number; duration: number };
 const n = (pitch: number, startTime = 0, duration = 1): Note => ({ pitch, startTime, duration });
@@ -43,4 +44,64 @@ test("a zero shift is identity on pitch", () => {
 
 test("an empty clip transposes to empty", () => {
   assert.deepEqual(transpose([], 7), []);
+});
+
+// --- dedupeCollisions (R2: engine reports, we clean up) ------------------------
+
+const collision = (midi: number, onset: number, duration: number, sources: number[]): Collision => ({
+  voice: null,
+  onset,
+  duration,
+  midi,
+  count: sources.length,
+  source_midis: sources,
+});
+
+test("no collisions reported leaves the clip untouched", () => {
+  const notes = [n(60), n(62), n(64)];
+  const { notes: out, removed } = dedupeCollisions(notes, []);
+  assert.equal(removed, 0);
+  assert.deepEqual(out, notes);
+});
+
+test("drops the duplicate the snap created, keeping the first in clip order", () => {
+  // C and C# both conformed to C: two notes now share pitch 60 at beat 0.
+  const notes = [n(60), n(60), n(62)];
+  const { notes: out, removed } = dedupeCollisions(notes, [collision(60, 0, 1, [60, 61])]);
+  assert.equal(removed, 1);
+  assert.deepEqual(pitches(out), [60, 62]);
+});
+
+test("leaves duplicates alone when the snap did not create them", () => {
+  // Same stacked pair, but the engine reported no collision — it pre-existed,
+  // which the engine calls the input's business. We must not touch it.
+  const notes = [n(60), n(60)];
+  const { notes: out, removed } = dedupeCollisions(notes, []);
+  assert.equal(removed, 0);
+  assert.deepEqual(pitches(out), [60, 60]);
+});
+
+test("only the colliding slot is deduped, not every note at that pitch", () => {
+  // Two notes at pitch 60 collide on beat 0; a third at beat 2 is a real note.
+  const notes = [n(60, 0), n(60, 0), n(60, 2)];
+  const { notes: out, removed } = dedupeCollisions(notes, [collision(60, 0, 1, [60, 61])]);
+  assert.equal(removed, 1);
+  assert.deepEqual(
+    out.map((x) => [x.pitch, x.startTime]),
+    [[60, 0], [60, 2]],
+  );
+});
+
+test("a three-way merge drops two notes", () => {
+  const notes = [n(60), n(60), n(60), n(67)];
+  const { notes: out, removed } = dedupeCollisions(notes, [collision(60, 0, 1, [59, 60, 61])]);
+  assert.equal(removed, 2);
+  assert.deepEqual(pitches(out), [60, 67]);
+});
+
+test("notes differing only in duration are different slots", () => {
+  const notes = [{ pitch: 60, startTime: 0, duration: 1 }, { pitch: 60, startTime: 0, duration: 2 }];
+  const { notes: out, removed } = dedupeCollisions(notes, [collision(60, 0, 1, [60, 61])]);
+  assert.equal(removed, 0);
+  assert.equal(out.length, 2);
 });

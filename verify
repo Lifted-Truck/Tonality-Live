@@ -97,6 +97,33 @@ full() {
     echo "  FAIL: /analyze response missing expected 'summary' contract" >&2
     return 1
   }
+
+  # /transform (Phase-7 conform). Same chromatic fixture the ratification pinned:
+  # C C# D F# into C major -> C# collides onto C, which must be REPORTED (R2).
+  local conformed
+  conformed=$(curl -sf --max-time 5 -X POST "$BRIDGE_URL/transform" \
+    -H 'Content-Type: application/json' \
+    -d '{"op":"fit_to_key","tonicPc":0,"mode":"major","bpm":120,"notes":[{"pitch":60,"startTime":0,"duration":1},{"pitch":61,"startTime":0,"duration":1},{"pitch":62,"startTime":0,"duration":1},{"pitch":66,"startTime":0,"duration":1}]}' 2>/dev/null) || {
+    echo "  FAIL: /transform did not respond 2xx while bridge was up" >&2
+    return 1
+  }
+  printf '%s' "$conformed" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+notes, report = d.get("notes"), d.get("report")
+assert isinstance(notes, list) and len(notes) == 4, "note count not preserved"
+for n in notes:
+    assert set(n) == {"pitch", "startTime", "duration", "velocity"}, f"not a NoteDescription: {n}"
+assert isinstance(report, dict), "no report object"
+assert "events" not in report, "report should not duplicate notes as events"
+for key in ("collisions", "notes_snapped", "ties_resolved", "tie_break"):
+    assert key in report, f"report missing {key}"
+print("  /transform -> %d notes, %d snapped, %d collision(s), tie_break=%s"
+      % (len(notes), report["notes_snapped"], len(report["collisions"]), report["tie_break"]))
+' || {
+    echo "  FAIL: /transform response violated the notes+report contract" >&2
+    return 1
+  }
   echo "verify[full]: OK"
   return 0
 }

@@ -44,8 +44,9 @@ Listens on `http://127.0.0.1:8765` (override with `TONALITY_BRIDGE_HOST` /
 | Method | Path         | Body                                   | Returns |
 |--------|--------------|----------------------------------------|---------|
 | GET    | `/health`    | —                                      | `{ok, mts}` |
+| GET    | `/scales`    | —                                      | `{scales: [{name, degrees}]}` — the engine's catalog |
 | POST   | `/analyze`   | `{notes, bpm?, timeSignature?, options?}` | full `midi_file_analysis` result + `summary` |
-| POST   | `/transform` | —                                      | `501` (seam, see below) |
+| POST   | `/transform` | `{op, notes, ...}` (see below)         | `{notes, report}` |
 
 `notes` is an array of `{pitch, startTime, duration, velocity?}` — exactly the
 SDK's `MidiClip.notes` (`NoteDescription`) shape; times are quarter-note beats.
@@ -59,11 +60,49 @@ curl -s -X POST localhost:8765/analyze -H 'Content-Type: application/json' \
        {"pitch":64,"startTime":0,"duration":1},{"pitch":67,"startTime":0,"duration":1}]}'
 ```
 
-## The `/transform` seam
+## `/transform` — conform (shipped)
 
-Transpose runs in the extension (pure arithmetic). Theory-driven alters —
-fit-to-key, scale-conform, revoice/voice-leading — belong in the engine but
-**don't exist in `mts` yet**: today `mts` analyzes and has only a couple of
-generative hooks (`suggest_voicings`, `apply_groove`). Adding those transform
-functions to Tonality (and folding the decision into its `ROADMAP.md`) is the
-prerequisite for wiring this endpoint to return altered notes.
+Transpose runs in the extension (pure arithmetic). The theory-driven alters live
+in the engine (`mts.generate.conform`, Phase-7 slice 0) and arrive through here.
+
+```bash
+curl -s -X POST localhost:8765/transform -H 'Content-Type: application/json' \
+  -d '{"op":"fit_to_key","tonicPc":0,"mode":"major",
+       "notes":[{"pitch":60,"startTime":0,"duration":1},
+                {"pitch":61,"startTime":0,"duration":1}]}'
+```
+
+| `op` | Required | Optional |
+|------|----------|----------|
+| `fit_to_key` | `tonicPc` (0–11), `mode` (`major`\|`minor`) | `tieBreak` |
+| `conform_to_scale` | `rootPc` (0–11), `scale` (catalog name from `/scales`, or a degree list) | `tieBreak` |
+
+`tieBreak` is `previous` (default — resolve toward the previous note in the
+voice), `down`, or `up`. It matters more than it sounds: in a major key **every**
+out-of-scale pitch class sits exactly between two scale members, so this setting
+decides all of them.
+
+The response is `{notes, report}` — `notes` in `NoteDescription` shape, 1:1 with
+the input order (pitch is the only field that changes); `report` is the engine's
+`ConformResult` minus `events`, carrying `edits`, `collisions`, `degrees`,
+`notes_snapped`, `ties_resolved`.
+
+**Collisions are reported, not resolved** (engine ruling R2). A snap is
+many-to-one, so two notes can land on one pitch; the engine preserves note count
+and itemizes what merged, leaving the choice of survivor to the consumer. The
+extension dedupes (first-in-clip-order wins) — that is clip hygiene, not theory.
+
+`revoice` is still deferred upstream to Tonality's Phase 7 proper and returns a
+visible **501**.
+
+## How this got here
+
+The seam sat at 501 by design while the engine lacked the functions: the
+alternative was a second copy of the theory in the extension, drifting from the
+one that answers `/analyze`. Tonality-Live filed brief `tonality-live-001`; the
+engine accepted, collapsed `fit_to_key` into `conform_to_scale` with a wrapper,
+ruled the tie-break default (`previous`) and collision policy (keep-and-report),
+and shipped. The exchange is at
+`<Tonality>/integrations/Tonality-Live/{brief,response,ratify,response-2}.md`.
+
+`revoice` is still deferred there — it is progression realization, not a snap.

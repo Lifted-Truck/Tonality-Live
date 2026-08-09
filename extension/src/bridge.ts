@@ -38,23 +38,104 @@ export interface AnalyzeResult {
   key_regions?: unknown;
 }
 
-export async function analyze(payload: AnalyzePayload): Promise<AnalyzeResult> {
+/** One collision the engine's snap created — reported, never resolved upstream. */
+export interface Collision {
+  voice: string | null;
+  onset: number;
+  duration: number;
+  midi: number;
+  count: number;
+  /** The distinct input pitches that merged onto `midi`. */
+  source_midis: number[];
+}
+
+/** One snapped note. Engine field names pass through verbatim (snake_case). */
+export interface ConformEdit {
+  index: number;
+  voice: string | null;
+  onset: number;
+  from_midi: number;
+  to_midi: number;
+  delta: number;
+  tied: boolean;
+  tie_resolution: string | null;
+}
+
+/** The engine's `ConformResult`, minus `events` (which the bridge turns into `notes`). */
+export interface ConformReport {
+  scale_name: string | null;
+  degrees: number[];
+  root_pc: number;
+  tie_break: string;
+  edits: ConformEdit[];
+  collisions: Collision[];
+  notes_total: number;
+  notes_snapped: number;
+  ties_resolved: number;
+}
+
+export interface TransformResult {
+  /** Conformed notes, 1:1 with the input order — pitch is the only changed field. */
+  notes: Required<BridgeNote>[];
+  report: ConformReport;
+}
+
+interface TransformCommon {
+  notes: BridgeNote[];
+  bpm?: number;
+  /** Engine default is "previous" (melodic continuity); "down"/"up" force a direction. */
+  tieBreak?: "previous" | "down" | "up";
+}
+
+export type TransformPayload =
+  | (TransformCommon & { op: "fit_to_key"; tonicPc: number; mode: "major" | "minor" })
+  | (TransformCommon & { op: "conform_to_scale"; scale: string; rootPc: number });
+
+export interface ScaleInfo {
+  name: string;
+  degrees: number[];
+}
+
+/** Every bridge call funnels through here so the "start the bridge" advice lives once. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${BASE}/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    response = await fetch(`${BASE}${path}`, init);
   } catch (err) {
     throw new Error(
       `Can't reach the Tonality bridge at ${BASE}. Start it first:\n` +
-        `  <Tonality>/.venv/bin/python3.13 <Tonality-Live>/bridge/server.py\n(${String(err)})`,
+        `  <Tonality>/.venv/bin/python3 <Tonality-Live>/bridge/server.py\n(${String(err)})`,
     );
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(`Bridge returned ${response.status}: ${body}`);
   }
-  return (await response.json()) as AnalyzeResult;
+  return (await response.json()) as T;
+}
+
+function postJson<T>(path: string, payload: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function analyze(payload: AnalyzePayload): Promise<AnalyzeResult> {
+  return postJson<AnalyzeResult>("/analyze", payload);
+}
+
+/**
+ * Conform a clip to a key or scale. All musical decisions — nearest member, tie
+ * resolution, what counts as a collision — are the engine's; this is transport.
+ */
+export function transform(payload: TransformPayload): Promise<TransformResult> {
+  return postJson<TransformResult>("/transform", payload);
+}
+
+/** The engine's scale catalog. Fetched, never hardcoded — it would go stale. */
+export async function fetchScales(): Promise<ScaleInfo[]> {
+  const { scales } = await request<{ scales: ScaleInfo[] }>("/scales");
+  return scales;
 }

@@ -86,10 +86,14 @@ npm run build`. Run into Live: `npm start`. Package: `npm run package`.
 
 **Domain invariants (the critic checks against these).**
 - **No music theory here.** This repo must NEVER reimplement Tonality's domain
-  core (set-class / key induction / chord naming / voice-leading). Per
-  INTEGRATIONS rule 3, that logic stays in `mts`; the bridge is glue only
-  (JSON ⇄ Sequence). The single permitted local transform is `transpose`
-  (pure MIDI arithmetic + 0–127 clamp, `extension/src/transform.ts`).
+  core (set-class / key induction / chord naming / voice-leading / **scale
+  snapping**). Per INTEGRATIONS rule 3, that logic stays in `mts`; the bridge is
+  glue only (JSON ⇄ Sequence). Only two local note operations are permitted, and
+  both are arithmetic or bookkeeping rather than theory — `transpose` (pure MIDI
+  shift + 0–127 clamp) and `dedupeCollisions` (drop notes the engine's snap
+  merged onto one pitch, first-in-clip-order wins; the engine rules
+  keep-and-report and leaves the survivor to the consumer). Both live in
+  `extension/src/transform.ts`.
 - **Bridge stays dependency-free.** `bridge/server.py` uses only the stdlib +
   `mts`; adding a third-party dep is a human-gated decision.
 - **Boundary carries canonical data (rule 8).** Pitch-class / MIDI integers
@@ -102,16 +106,18 @@ npm run build`. Run into Live: `npm start`. Package: `npm run package`.
 
 **Protected paths (human gate).** `extension/vendor/*.tgz` (licensed beta
 binaries); `extension/manifest.json` and the extension's public command IDs
-(`tonality.analyzeClip`, `tonality.transpose`) — public interface; the bridge's
-HTTP contract (`/health`, `/analyze`, `/transform`) shared with `mts`.
+(`tonality.analyzeClip`, `tonality.transpose`, `tonality.fitToKey`,
+`tonality.conformToScale`) — public interface; the bridge's HTTP contract
+(`/health`, `/scales`, `/analyze`, `/transform`) shared with `mts`.
 
-**Verify targets.** `fast` (~seconds): `tsc --noEmit` + `transpose` unit tests
-(node:test via tsx) + `py_compile`. `full` (~10–20s): fast + `npm run build` +
-bridge glue tests (stdlib unittest — marshalling + summary shaping; **skip**
-when the engine is absent) + a live `/health`+`/analyze` contract check,
-**skipped-with-notice** when the Tonality venv/bridge is unreachable (degraded,
-not red). Test stack is zero-dependency by decision. Remaining gap: no
-end-to-end test inside a live Ableton (out of scope).
+**Verify targets.** `fast` (~seconds): `tsc --noEmit` + 13 unit tests (transpose
++ dedupeCollisions, node:test via tsx) + `py_compile`. `full` (~10–20s): fast +
+`npm run build` + 19 bridge glue tests (stdlib unittest — marshalling, summary
+shaping, transform dispatch; **skip** when the engine is absent) + live
+`/health` + `/analyze` + `/transform` contract checks, **skipped-with-notice**
+when the Tonality venv/bridge is unreachable (degraded, not red). Test stack is
+zero-dependency by decision. Remaining gap: no end-to-end test inside a live
+Ableton (out of scope).
 
 <!-- KNOWLEDGE-LOOP:START -->
 ## Self-Improving Knowledge Loop

@@ -119,6 +119,108 @@ class SequenceMarshalling(unittest.TestCase):
         self.assertIsInstance(seq, server.Sequence)
 
 
+@unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
+class TransformMarshalling(unittest.TestCase):
+    """/transform glue: op dispatch, NoteDescription reshaping, error mapping.
+
+    The snap itself is the engine's and is tested there — what is ours is that
+    the right entry point is called and the note list crosses the boundary intact.
+    """
+
+    # C, C#, D, F# in C major: C# -> C (colliding with the C already there),
+    # F# -> F. The case pinned in the ratification exchange.
+    CHROMATIC = {
+        "bpm": 120,
+        "notes": [
+            {"pitch": 60, "startTime": 0, "duration": 1},
+            {"pitch": 61, "startTime": 0, "duration": 1},
+            {"pitch": 62, "startTime": 0, "duration": 1},
+            {"pitch": 66, "startTime": 0, "duration": 1},
+        ],
+    }
+
+    def test_fit_to_key_returns_note_descriptions(self):
+        out = server.transform(
+            {"op": "fit_to_key", "tonicPc": 0, "mode": "major", **self.CHROMATIC}
+        )
+        self.assertEqual([n["pitch"] for n in out["notes"]], [60, 60, 62, 65])
+        for note in out["notes"]:  # exactly the SDK shape, nothing extra
+            self.assertEqual(set(note), {"pitch", "startTime", "duration", "velocity"})
+
+    def test_note_count_and_timing_preserved(self):
+        out = server.transform(
+            {"op": "fit_to_key", "tonicPc": 0, "mode": "major", **self.CHROMATIC}
+        )
+        self.assertEqual(len(out["notes"]), len(self.CHROMATIC["notes"]))
+        for before, after in zip(self.CHROMATIC["notes"], out["notes"]):
+            self.assertEqual(before["startTime"], after["startTime"])
+            self.assertEqual(before["duration"], after["duration"])
+
+    def test_collisions_are_reported_not_resolved(self):
+        # R2 keep-and-report: the duplicate stays in `notes`, and is itemized.
+        out = server.transform(
+            {"op": "fit_to_key", "tonicPc": 0, "mode": "major", **self.CHROMATIC}
+        )
+        collisions = out["report"]["collisions"]
+        self.assertEqual(len(collisions), 1)
+        self.assertEqual(collisions[0]["midi"], 60)
+        self.assertEqual(collisions[0]["source_midis"], [60, 61])
+        self.assertEqual([n["pitch"] for n in out["notes"]].count(60), 2)
+
+    def test_report_carries_no_events_key(self):
+        # `events` becomes `notes`; leaving both would be two sources of truth.
+        out = server.transform(
+            {"op": "fit_to_key", "tonicPc": 0, "mode": "major", **self.CHROMATIC}
+        )
+        self.assertNotIn("events", out["report"])
+
+    def test_conform_to_scale_by_catalog_name(self):
+        out = server.transform(
+            {
+                "op": "conform_to_scale",
+                "scale": "Whole Tone",
+                "rootPc": 0,
+                "notes": [{"pitch": 61, "startTime": 0, "duration": 1}],
+            }
+        )
+        self.assertEqual(out["report"]["degrees"], [0, 2, 4, 6, 8, 10])
+        self.assertIn(out["notes"][0]["pitch"] % 12, out["report"]["degrees"])
+
+    def test_tie_break_is_passed_through(self):
+        base = {"op": "fit_to_key", "tonicPc": 0, "mode": "major",
+                "notes": [{"pitch": 61, "startTime": 0, "duration": 1}]}
+        down = server.transform({**base, "tieBreak": "down"})
+        up = server.transform({**base, "tieBreak": "up"})
+        self.assertEqual(down["notes"][0]["pitch"], 60)
+        self.assertEqual(up["notes"][0]["pitch"], 62)
+
+    def test_revoice_still_raises_not_implemented(self):
+        # Deferred upstream to Tonality's Phase 7 — must stay a visible 501.
+        with self.assertRaises(NotImplementedError):
+            server.transform({"op": "revoice", **self.CHROMATIC})
+
+    def test_unknown_op_rejected(self):
+        with self.assertRaises(ValueError):
+            server.transform({"op": "nope", **self.CHROMATIC})
+
+    def test_missing_required_params_rejected(self):
+        with self.assertRaises(ValueError):
+            server.transform({"op": "fit_to_key", **self.CHROMATIC})  # no tonicPc
+        with self.assertRaises(ValueError):
+            server.transform({"op": "conform_to_scale", "rootPc": 0, **self.CHROMATIC})
+
+
+@unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
+class ScaleCatalog(unittest.TestCase):
+    def test_scales_are_served_from_the_engine(self):
+        out = server.scales()
+        names = [s["name"] for s in out["scales"]]
+        self.assertIn("Ionian", names)
+        self.assertEqual(names, sorted(names))
+        ionian = next(s for s in out["scales"] if s["name"] == "Ionian")
+        self.assertEqual(ionian["degrees"], [0, 2, 4, 5, 7, 9, 11])
+
+
 if __name__ == "__main__":
     if not _HAVE_ENGINE:
         print(f"SKIP: bridge tests need the Tonality engine — {_WHY}", file=sys.stderr)

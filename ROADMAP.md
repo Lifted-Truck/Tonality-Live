@@ -5,12 +5,14 @@ State lives here; conversations are ephemeral.
 
 ## Status
 
-- **Phase:** shipped-v1 / hardening. v1 (analysis end-to-end + transpose) is
-  authored and builds; the harness was retrofitted 2026-07-13.
-- **Oracle:** `./verify fast` = `tsc --noEmit` + 7 `transpose` unit tests
-  (node:test) + `py_compile`. `full` adds `npm run build` + 9 bridge glue
-  tests (unittest; skip when the engine is absent) + a live bridge
-  `/health`+`/analyze` contract check (skipped-with-notice when absent).
+- **Phase:** shipped-v1 / hardening. Analysis, transpose, and the conform family
+  (fit-to-key + conform-to-scale) are live end-to-end; harness retrofitted
+  2026-07-13; Q-003 closed 2026-08-09.
+- **Oracle:** `./verify fast` = `tsc --noEmit` + 13 unit tests (transpose +
+  dedupeCollisions, node:test) + `py_compile`. `full` adds `npm run build` + 19
+  bridge glue tests (unittest; skip when the engine is absent) + live
+  `/health` + `/analyze` + `/transform` contract checks (skipped-with-notice
+  when absent). Last full run 2026-08-09: green against a live bridge.
   **Remaining gap:** no end-to-end test in a live Ableton (out of scope).
 - **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1); push
   gated on a green oracle (D3, D4); Q-003 provider confirmed as the Python
@@ -59,34 +61,42 @@ theory in this repo** — theory-driven alters go through the bridge's
   decision 2026-07-13. Bridge tests SKIP (not fail) when the engine is absent,
   matching `full`'s degrade-visibly contract.
 
-### Q-003 — Scale-conform via the /transform seam (blocked on Tonality)
-- **Status:** blocked (upstream) — **rulings ratified 2026-07-13; awaiting the
-  provider's implementation notice.** Exchange:
-  `~/Documents/Tonality/integrations/Tonality-Live/{brief,response,ratify}.md`
-  (ball: provider).
+### Q-003 — Scale-conform via the /transform seam
+- **Status:** done 2026-08-09 (trace: traces/2026-08-09-q003-conform.md). The
+  engine shipped `conform_to_scale` + `fit_to_key` (their PR #259); `/transform`
+  is live and both commands are wired. Exchange:
+  `~/Documents/Tonality/integrations/Tonality-Live/{brief,response,ratify,response-2}.md`.
+- **Both refinements were ruled our way:** tie-break default is now `previous`
+  (context-sensitive, as proposed), and our tie-frequency table is pinned in
+  *their* CI as `test_r1_the_tie_count_is_as_ratified`. Collisions: keep-and-report.
 - **Provider is the Python engine (`mts`), not `tonality-core`** — see DECISIONS D6.
 - **Scope:** `bridge/server.py` (`/transform` endpoint, currently 501),
   `extension/src/` (new context-menu action), `./verify` (contract check).
 - **Acceptance criteria:**
-  1. `mts` ships `conform_to_scale` + the `fit_to_key` wrapper (upstream,
-     provider-owned; register-preserving, generative-side per their rulings).
-  2. `/transform` returns altered notes in the same `NoteDescription` shape
-     `/analyze` consumes; `full` gains a `/transform` contract check with the
-     same skip-when-engine-absent behavior.
-  3. New alter written back as one undo step (`withinTransaction`).
-  4. Whatever the provider rules on pitch collisions (dedupe vs
-     preserve-and-document) is honored; if they choose preserve, clip-hygiene
-     dedupe may live here (that is not theory).
-- **Out of scope:** implementing the snap locally — violates the no-theory-here
-  invariant, under any schedule pressure. Also out: `revoice`, deferred by the
-  provider to their Phase 7; `/transform` stays a visible 501 for it.
-- **Open questions (with the provider):** the `tie_break` default — it governs
-  every accidental in diatonic use, not a rare gap (C major: 5/5 out-of-scale
-  pcs tie); and the collision ruling. Both raised in `ratify.md`.
+  1. ✅ `mts` ships `conform_to_scale` + the `fit_to_key` wrapper (upstream —
+     `mts/generate/conform.py`, register-preserving, generative-side).
+  2. ✅ `/transform` returns altered notes in the same `NoteDescription` shape
+     `/analyze` consumes; `full` gained a `/transform` contract check with the
+     same skip-when-engine-absent behavior. Verified live: 4 notes, 2 snapped,
+     1 collision, `tie_break=previous`.
+  3. ✅ Both alters written back as one undo step (`withinTransaction`,
+     `extension/src/extension.ts` `runConform`).
+  4. ✅ Collision ruling honored: the provider chose keep-and-report, so
+     `dedupeCollisions` drops the merged duplicates here (first-in-clip-order
+     wins) and the result dialog reports how many were merged.
+- **Out of scope (held):** implementing the snap locally — never happened; the
+  engine owns every musical decision. `revoice` remains deferred by the provider
+  to their Phase 7 and `/transform` still returns a visible 501 for it.
+- **Beyond the brief:** `GET /scales` was added so the scale picker is served
+  from the engine catalog rather than a hardcoded TypeScript copy that would go
+  stale (37 scales).
 
 ## Decision log
 
 <!-- One line per ratified decision, newest first, linking to traces/. -->
+- 2026-08-09 — Q-003 closed: `/transform` live, "Fit to Key…" + "Conform to
+  Scale…" wired, `GET /scales` added, collisions deduped consumer-side.
+  (DECISIONS D7; trace: traces/2026-08-09-q003-conform.md)
 - 2026-07-13 — Q-003 rulings ratified with two refinements (tie-break default,
   collision ruling); provider confirmed as the Python engine, not tonality-core.
   (DECISIONS D5, D6; trace: traces/2026-07-13-ratify-q003.md)

@@ -4,6 +4,33 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D7 — 2026-08-09 — Wire the conform family; two new public commands; `GET /scales`
+
+- **Decision:** With the engine's conform family shipped (their PR #259), take
+  `/transform` from 501 to live and expose it in Live. Human-gated items
+  approved in session before writing: **two new public command IDs**
+  (`tonality.fitToKey`, `tonality.conformToScale`) and the `/transform` HTTP
+  contract — both §Domain protected paths.
+- **Wire:** request `{op, notes, bpm?, tieBreak?}` plus `tonicPc`/`mode`
+  (fit_to_key) or `rootPc`/`scale` (conform_to_scale); response
+  `{notes, report}` where `notes` is `NoteDescription`-shaped and `report` is
+  the engine's `ConformResult` minus `events`, passed through **unreshaped** so
+  the bridge stays glue.
+- **`GET /scales` added** (beyond the brief): the picker needs the engine's 37
+  scales, and a hardcoded TypeScript copy would silently drift when the engine
+  adds one. Serving it keeps one source of truth.
+- **Collisions — dedupe here, and say so.** The engine ruled keep-and-report and
+  deliberately left the survivor choice to the consumer. `dedupeCollisions`
+  drops merged duplicates keeping **first in clip order** — arbitrary but
+  deterministic, and it asserts nothing about which note was better (the exact
+  judgment the engine declined). Only slots the engine *reported* are touched;
+  pre-existing duplicates are left alone. The count is reported in the dialog.
+- **Invariant held:** no snapping logic here. Every musical decision — nearest
+  member, tie resolution, what counts as a collision — is the engine's.
+- **Evidence:** `./verify full` green end-to-end against a live bridge (13
+  extension + 19 bridge tests; `/health` + `/analyze` + `/transform` checks).
+- **Trace:** traces/2026-08-09-q003-conform.md
+
 ## D6 — 2026-07-13 — The Python engine (`mts`) is Q-003's provider, NOT `tonality-core`
 
 - **Decision:** Tonality-Live's provider is the pure-Python Tonality engine

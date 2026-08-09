@@ -64,6 +64,12 @@
           root.innerHTML = '<h1>Tonality</h1><div class="error">' + esc(PAYLOAD.error) + "</div>";
           return;
         }
+        if (PAYLOAD.note) {
+          // Result of a transform (fit-to-key / conform-to-scale): a plain
+          // report of what changed, no analysis to render.
+          root.innerHTML = "<h1>Tonality</h1><p>" + esc(PAYLOAD.note) + "</p>";
+          return;
+        }
         const s = PAYLOAD.summary || { key: null, chords: [] };
         let html = "<h1>Tonality analysis</h1>";
         if (s.key) {
