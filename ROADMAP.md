@@ -13,7 +13,12 @@ State lives here; conversations are ephemeral.
   bridge glue tests (unittest; skip when the engine is absent) + live
   `/health` + `/analyze` + `/transform` contract checks (skipped-with-notice
   when absent). Last full run 2026-08-09: green against a live bridge.
-  **Remaining gap:** no end-to-end test in a live Ableton (out of scope).
+  **Remaining gap:** no *automated* end-to-end test in a live Ableton (out of
+  scope — no harness for it). Manually verified once, 2026-08-10: all four
+  actions registered, both conform dialogs applied correctly, one-undo-step
+  confirmed by a single Cmd+Z reverting all four pitch changes, and collision
+  dedupe confirmed (3 notes → 2, reported to the user). See
+  traces/2026-08-10-live-run.md.
 - **Last human ratification:** 2026-07-13 — manifest RATIFIED (rung 1); push
   gated on a green oracle (D3, D4); Q-003 provider confirmed as the Python
   engine and Tonality's rulings ratified (D5, D6).

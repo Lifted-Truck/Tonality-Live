@@ -37,6 +37,13 @@ import transposeHtml from "../ui/transpose.html";
 export function activate(activation: ActivationContext): void {
   const context = initialize(activation, "1.0.0");
 
+  // Announce activation. Not decoration: Live's ExtensionHost.txt is the only
+  // window into whether an extension loaded, and an extension that logs nothing
+  // is indistinguishable from one that failed — every other extension on the
+  // host announces itself, so silence reads as breakage. Cost this a real
+  // debugging session on 2026-08-10.
+  console.log("[tonality] activating (SDK 1.0.0)");
+
   // --- Analyze -----------------------------------------------------------------
   context.commands.registerCommand("tonality.analyzeClip", async (arg: unknown) => {
     try {
@@ -136,6 +143,11 @@ export function activate(activation: ActivationContext): void {
   context.ui.registerContextMenuAction("MidiClip", "Transpose…", "tonality.transpose");
   context.ui.registerContextMenuAction("MidiClip", "Fit to Key…", "tonality.fitToKey");
   context.ui.registerContextMenuAction("MidiClip", "Conform to Scale…", "tonality.conformToScale");
+
+  console.log(
+    "[tonality] ready — 4 MidiClip actions registered; bridge expected at " +
+      (process.env.TONALITY_BRIDGE_URL ?? "http://127.0.0.1:8765"),
+  );
 }
 
 /** Display names for pitch classes. Spelling is display-layer only (rule 8). */

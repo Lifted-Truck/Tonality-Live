@@ -65,3 +65,50 @@ unverified). Entry format:
   in the .ablx with no localhost bridge), which would make the C++ core the
   right target.
 | supersedes: —
+
+[L0004] Loading into Live: install the .ablx, don't reach for Developer Mode
+| tier: candidate | added: 2026-08-10
+| tags: ableton-sdk-quirks, extension-lifecycle, macos-build-codesign
+| lesson: `npm start` (`extensions-cli run`) REQUIRES Developer Mode (Settings →
+  Extensions), and enabling it makes Live shut down the Extension Host it
+  normally runs — which disables every installed extension on the machine (~41
+  here, incl. able-mcp) until it is turned back off. To test a shipping build,
+  install instead: `npm run package` emits `extension/tonality-<ver>.ablx` (at
+  the package root, NOT dist/), then unzip it into
+  `~/Library/Application Support/Ableton/Extensions/<author-slug>.<name>/`
+  (here `julian-smith.tonality`) — layout is just `manifest.json` + `dist/`.
+  Restart Live; it appears in Settings → Extensions. The write needs
+  `dangerouslyDisableSandbox: true` or it lands in a sandbox overlay Live can't
+  see. Testing note: extension actions are NOT top-level in a clip's
+  context menu — they nest under a single **Extensions** submenu.
+| evidence: SDK docs getting-started/2-quick-start + development/2-execution
+  ("This is required — without it, npm start cannot connect to Live"); two
+  `npm start` runs failed with "bring-up timed out (control channel handshake)"
+  with Developer Mode off (user-confirmed off); hand-install + restart produced
+  working menu items and `[tonality]` log lines on 2026-08-10.
+| falsifier: the beta ships a CLI install command or a documented drag-drop
+  install path that supersedes hand-unzipping; or a future Live keeps hosting
+  installed extensions while Developer Mode is on.
+| supersedes: —
+
+[L0005] An extension that logs nothing looks exactly like one that failed
+| tier: candidate | added: 2026-08-10
+| tags: extension-lifecycle, ableton-sdk-quirks
+| lesson: Live's `ExtensionHost.txt` is the only window into extension loading,
+  and it contains ONLY what each extension chooses to log. Our `activate()`
+  logged nothing, so the absence of a `[tonality]` line was read as a failed
+  load while the extension was in fact working — wasted a real chunk of a
+  debugging session chasing Developer Mode and install paths. Every other
+  extension on this host announces itself; silence therefore reads as breakage.
+  `activate()` now logs on entry and after registering its actions. Diagnostic
+  order that actually works: (1) is the MAIN Live process running
+  (`pgrep -f MacOS/Live` — AddOns/PluginScanner helpers linger and look like
+  Live), (2) did the host start (`Started: Extension Host` in the log), (3) is
+  the extension listed in Settings → Extensions, (4) only then suspect code.
+| evidence: extension/src/extension.ts activate() console.log calls; host log
+  2026-08-10T12:29:58 `[tonality] activating` + `ready — 4 MidiClip actions
+  registered`; the earlier same-day session where no log line existed yet and
+  all four menu actions nevertheless worked.
+| falsifier: the SDK starts logging activation for every extension itself,
+  making per-extension logging redundant.
+| supersedes: —
