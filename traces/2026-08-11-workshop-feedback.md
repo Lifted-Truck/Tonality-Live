@@ -45,3 +45,25 @@
   or should the engine expose it natively? Worth raising in the Q-008(b)
   conversation rather than as a new brief. The workshop page still has no
   automated tests. Extension side still unwired.
+
+## Round 3b — the keyboard was rendering distorted
+
+- **Symptom (human, with a screenshot):** "formatting is a little messed up" —
+  key labels squashed and the keyboard column shrinking with the window.
+- **Cause:** the canvas had a fixed backing store (`width="1600" height="620"`)
+  stretched by CSS to fill a variable container. Horizontal and vertical scale
+  factors therefore differed, distorting glyphs, and `GUTTER` being expressed in
+  *canvas* pixels meant the keyboard's on-screen width shrank as the window
+  narrowed — at 505px wide it was ~29 CSS px, far too narrow for "C#4".
+- **Fix:** size the backing store to the element's real displayed size × DPR and
+  `setTransform(dpr,…)`, so all drawing is in CSS pixels. `GUTTER` is now 56 CSS
+  px — constant on screen — and the CSS `--gutter` var is simply that number, so
+  the chord-strip label column and the drawn keyboard cannot drift apart.
+  Verified: backing 1010×1248 for a 505×624 element at DPR 2 → scaleX 2.000,
+  scaleY 1.999, uniform.
+- **Also corrected while there:** white keys were being drawn dark grey
+  (`#4a4a4a`), which inverted the one visual convention a keyboard has. Now
+  ordinary white keys are light (`#9d9a94`), black keys dark (`#232323`), and
+  the accent tint means "in the scale" — so the tint reads as information rather
+  than as the key's identity. Ink flipped to match (dark on light keys, light on
+  dark ones).

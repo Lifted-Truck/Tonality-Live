@@ -176,7 +176,7 @@
       <div class="chordstrip" id="chordsAfter"></div>
     </div>
     <div class="rollwrap">
-      <canvas id="roll" width="1600" height="620"></canvas>
+      <canvas id="roll"></canvas>
       <div class="playhead" id="playhead"></div>
       <div class="overlay hidden" id="overlay">
         <div class="card">
@@ -537,13 +537,30 @@ function shadedDegrees() {
   return S.refDegrees;
 }
 
-const GUTTER = 92;                     // canvas px reserved for the keyboard
+const GUTTER = 56;                     // CSS px reserved for the keyboard
+
+/* The canvas backing store is sized to its ACTUAL displayed size (and DPR), so
+   everything below is drawn in CSS pixels. A fixed backing store stretched to
+   fit scales x and y by different factors — which squashed the key labels and
+   shrank the keyboard as the window narrowed. */
+function fitCanvas() {
+  const r = cv.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return true;
+}
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const noteName = p => PC[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 2);
 
 function draw() {
   computeSpan();
-  const W = cv.width, H = cv.height, lanes = HI - LO + 1, lh = H / lanes;
+  if (!fitCanvas()) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.width / dpr, H = cv.height / dpr;      // CSS pixels
+  const lanes = HI - LO + 1, lh = H / lanes;
   const bx = b => GUTTER + (b / BEATS) * (W - GUTTER), ly = p => H - ((p - LO + 1) * lh);
   const inRef = p => S.refDegrees ? S.refDegrees.includes(((p % 12) + 12) % 12) : false;
   const target = shadedDegrees();
@@ -565,26 +582,28 @@ function draw() {
      the shape you already read fluently; the accent tint says "in this scale",
      so a scale can be read straight off the left edge. */
   g.fillStyle = "#141414"; g.fillRect(0, 0, GUTTER, H);
-  const nameEvery = lh >= 11;            // when lanes get tight, label octaves only
+  const fs = Math.min(10, Math.max(6.5, lh - 3));
+  const nameEvery = lh >= 9;             // when lanes get tight, label octaves only
   g.textBaseline = "middle";
-  g.font = `${Math.min(12, Math.max(8, lh - 4))}px ui-monospace, Menlo, monospace`;
+  g.font = `${fs}px ui-monospace, Menlo, monospace`;
   for (let p = LO; p <= HI; p++) {
     const y = ly(p), black = BLACK.has(((p % 12) + 12) % 12), on = lit(p);
-    g.fillStyle = on ? (black ? "#6b5327" : "#c9a463") : (black ? "#242424" : "#4a4a4a");
-    g.fillRect(0, y + 1, GUTTER - 8, lh - 2);
+    g.fillStyle = on ? (black ? "#a07c33" : "#d9b471")     // in the scale
+                     : (black ? "#232323" : "#9d9a94");    // ordinary black / white key
+    g.fillRect(0, y + 0.5, GUTTER - 6, Math.max(1, lh - 1));
     g.strokeStyle = "#101010"; g.lineWidth = 1;
-    g.strokeRect(0.5, y + 1.5, GUTTER - 9, lh - 3);
+    g.strokeRect(0.5, y + 1, GUTTER - 7, Math.max(1, lh - 2));
     if (nameEvery || ((p % 12) + 12) % 12 === 0) {
-      g.fillStyle = on ? "#1a1a1a" : (black ? "#8f8f8f" : "#1f1f1f");
-      g.fillText(noteName(p), 6, y + lh / 2);
+      // Dark ink on the light (white / lit) keys, light ink on the dark ones.
+      g.fillStyle = on ? "#1a1a1a" : (black ? "#9a9a9a" : "#242424");
+      g.fillText(noteName(p), 4, y + lh / 2);
     }
   }
   g.strokeStyle = "#1e1e1e"; g.beginPath();
   g.moveTo(GUTTER - 0.5, 0); g.lineTo(GUTTER - 0.5, H); g.stroke();
   // The strips are DOM, the keyboard is canvas; lock them to the same width so
   // a chord label always sits over the beat it describes.
-  document.documentElement.style.setProperty(
-    "--gutter", (GUTTER / W * cv.clientWidth) + "px");
+  document.documentElement.style.setProperty("--gutter", GUTTER + "px");
 
   const shown = S.after ? S.after.notes : S.input.notes.map((n,i)=>({...n,_i:i}));
   const rounded = typeof g.roundRect === "function";
