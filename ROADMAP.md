@@ -170,13 +170,39 @@ theory in this repo** — theory-driven alters go through the bridge's
   1. ~~What does "audition" mean~~ — RULED: Web Audio in the dialog.
   2. ~~Do the four command IDs get removed~~ — RULED: yes, one replaces all four.
      Still needs the §Domain protected-path sign-off at the point of removal.
-  3. **Delivery mechanism — still open.** Bridge-served page at
-     `http://localhost:8765/workshop` (real assets, same-origin `/analyze` +
-     `/transform`, no data-URL ceiling; but the workshop then requires the bridge,
-     including for transpose) **vs** one large inlined `data:` URL (no bridge
-     dependency for the page, but no assets and a fat payload per open).
-     `showModalDialog` accepts `file:`, `data:`, `https:`, `http://localhost`.
-  4. Does the workshop transform the clip in place, or always into a copy?
+  3. Does the workshop transform the clip in place, or always into a copy?
+
+- **Delivery: bridge-served during development, decided at ship time (human,
+  2026-08-10).** The page content is identical either way — only delivery
+  differs — so this stays reversible IF two rules are honoured from the first
+  commit:
+  1. **The page never assumes where its input came from.** One `loadInput()`
+     seam: fetch a bridge session in served mode, read an inlined constant in
+     `data:` mode. Nothing else in the page knows the difference.
+  2. **The bridge base URL is an injected constant, never `location.origin`.**
+     In `data:` mode the origin is opaque/null, so calls must go to an absolute
+     `http://localhost:<port>`. (Cross-origin from `data:` already works — the
+     bridge sends `Access-Control-Allow-Origin: *`.)
+  Break either rule and the switch stops being a delivery change and becomes a
+  rewrite. `showModalDialog` accepts `file:`, `data:`, `https:`, `http://localhost`.
+
+- **Additional requirements (human, 2026-08-10):**
+  - **Transformation must be de-selectable.** A "None — analysis only" row sits at
+    the top of the list and is the **default**, so opening the workshop is just
+    observing the analysis; Render is disabled while it's selected. This is what
+    lets one command absorb "Analyze with Tonality".
+  - **"Mark out-of-scale notes" toggle**, with the reference scale from either
+    (a) the clip — note there are two distinct readings to disambiguate: Live's
+    own `song.rootNote`/`scaleName`/`scaleMode` (free, no engine call) vs the
+    engine's *detected* key from `/analyze`; offer both, labelled distinctly — or
+    (b) an explicitly set target scale (the root+scale control).
+    **Invariant check:** membership testing is
+    `((pitch % 12) - root + 12) % 12 ∈ degrees` — pure arithmetic against degrees
+    the **engine** supplied. We never derive a scale locally; that stays theory.
+    Needs a small bridge addition: `/analyze`'s summary currently returns the key
+    as `{name, score, margin}` with **no degrees**, and mapping "C major" → pcs
+    locally would duplicate the engine's catalog. Have the bridge pass the
+    detected key's degrees through instead.
 - **Out of scope until ruled:** any implementation.
 
 ### Q-006 — Context-aware transformation recommendations (vision, parked)
@@ -210,9 +236,14 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Ours vs theirs:** ours = the context dropdowns, presenting ranked
   recommendations, and applying the chosen one. Theirs = every judgment that
   produces a recommendation.
-- **Next step when the human wants it:** draft a wishlist brief to Tonality on
-  the `integrations/Tonality-Live/` channel. Not filed yet — premature before the
-  conversation.
+- **Brief filed 2026-08-10** at the human's request:
+  `~/Documents/Tonality/integrations/Tonality-Live/brief-recommendations.md`
+  (`tonality-live-003`, kind: early-signal, ball: provider, respond-by
+  2026-09-14). Explicitly *not* a request for work — nothing here is blocked on
+  it; it exists so Phase 7 can be shaped with this in view. Asks two things:
+  does a recommendation surface belong in the engine at all (vs. richer analysis
+  + consumer-side "therefore suggest X"), and if so, own endpoint or an
+  enrichment of the analysis result.
 
 ## Decision log
 
