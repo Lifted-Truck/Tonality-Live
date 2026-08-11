@@ -152,6 +152,23 @@ theory in this repo** — theory-driven alters go through the bridge's
   blessed operation". **Open question for the provider:** is composing
   remap→conform the blessed idiom for this, or should the engine expose it
   natively? Worth folding into the Q-008(b) conversation rather than a new brief.
+- **Round 5 (2026-08-11): constrain can transpose first, and the escape hatch
+  computes it.** Human insight — when translation is refused, the closest
+  approximation is not constrain alone but **constrain + transpose**, because
+  translation moves the music to the new tonic while a bare snap leaves it on the
+  old one. Measured against a translation that *is* possible (so there is ground
+  truth), summing |pitch difference| over the clip:
+  | target | auto shift | constrain only | transpose + constrain |
+  |---|---|---|---|
+  | G Dorian | −5 | 104 | **4** |
+  | D Dorian | +2 | 36 | **4** |
+  | F Dorian | +5 | 100 | **4** |
+  | A♯ Dorian | −2 | 39 | **4** |
+  9–26× closer, and the residual 4 is exactly the chromatic tones translation
+  keeps and conform folds. **The normalisation is load-bearing:** the shift must
+  be the *nearest* interval (|iv| ≤ 6), because remap is register-preserving —
+  C→G is 5 down, not 7 up. Using +7 measured **worse than not shifting at all**
+  (242 vs 104), which is why this was tested rather than assumed.
 - **Prototype covers:** analysis-only default with Render disabled; conform /
   remap / transpose; live `/analyze` chord strip coloured by function; before/
   after roll with ghost outlines and move connectors; out-of-scale marking
@@ -406,12 +423,51 @@ theory in this repo** — theory-driven alters go through the bridge's
     the shape for this — a recommendation list beside the transformation list.
 - **Where each named pattern already stands upstream (from their ROADMAP):**
   modulation-path planning and scale/meter re-mapping are named Phase 7
-  extensions, generative-side; tonicization pivots exist (`pivots_between`);
-  `revoice` is deferred to Phase 7 (their Ruling 6); "complexify / clean up
-  harmony" is unscoped anywhere.
+  extensions, generative-side; `revoice` is deferred to Phase 7 (their Ruling 6).
+  **CORRECTED 2026-08-11 by the provider (response-recommendations.md), two
+  claims of ours were wrong:**
+  - `pivots_between` is **not an engine tool** — it is *Wend's* function, rebased
+    onto the engine's `search_identities` (576/576 parity). Pivot enumeration as
+    an engine surface, and modulation-path planning, remain Phase 7 and **unbuilt**.
+  - "Clean up harmony" is **not unscoped**: mechanically it is `repair_sequence`
+    (impose a ruleset with minimal edits), shipped today for the voice-motion and
+    melody rule families; harmony-family repair is their recorded slice 2. A
+    cleanup *recommendation* only adds "which ruleset, and is the piece far
+    enough from conformance to be worth proposing" — a thin layer over shipped
+    machinery, not new work.
+  - "Complexify" **is** genuinely new, as we guessed — and the furthest away.
 - **Ours vs theirs:** ours = the context dropdowns, presenting ranked
   recommendations, and applying the chosen one. Theirs = every judgment that
   produces a recommendation.
+- **ANSWERED 2026-08-11** (`response-recommendations.md`, ball: none). Both
+  rulings given, work unscheduled; recorded upstream as their gap 32 with
+  **Tonality-Live named as the consumer**, so we may build UI against the
+  contract whenever we like:
+  - **Ruling 1 — the engine owns it**, because it already ships one:
+    `recommend_next_chord` defines the register. Their definition, worth keeping
+    verbatim: *"a recommendation is analysis pointed at possibility — a
+    deterministic enumeration of applicable transformations, each grounded in a
+    measured fact about the material, ranked under a citable versioned prior,
+    delivered plural-with-margins."* Engine owns enumeration + evidence +
+    ranking; **we** own dropdowns, presentation, audition, accept; uncited taste
+    belongs to their learned sibling, not to either of us.
+  - **Ruling 2 — its own endpoint, not an enrichment of `/analyze`.** Analysis
+    results are *measurements*; a recommendation is a *proposal*, and mixing them
+    in one payload is exactly the facts/proposals blur we asked to have pinned —
+    so it is pinned by transport rather than convention. Recommendations
+    reference **plan artifacts**, making audition-and-accept literally
+    `inspect plan → apply plan`. They also went further than our ask on the AI
+    boundary: we pinned "nothing model-generated in the note pipeline"; they pin
+    "the engine's recommender is deterministic end-to-end — no model calls exist
+    in `mts` and none will."
+  - **Genre priors: ruled, and the way we hoped.** They do not ship without a
+    citable source or licence-compatible corpus. Three tiers: measurement ·
+    genre/instrument *affinity* as a cited, plural, versioned, falsifiable prior
+    (gated on finding a source worth pinning) · uncited taste, which is the
+    learned sibling's. *"Jazz wants ♭9s ships when it can cite something, and
+    not before."*
+  - **UI contract when we build it:** ranked list with margins, per-candidate
+    evidence, a plan handle per row.
 - **Brief filed 2026-08-10** at the human's request:
   `~/Documents/Tonality/integrations/Tonality-Live/brief-recommendations.md`
   (`tonality-live-003`, kind: early-signal, ball: provider, respond-by

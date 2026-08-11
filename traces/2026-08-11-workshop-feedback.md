@@ -79,3 +79,26 @@
   which collection is being shown, so they are written to move together.
 - Verified it follows the root rather than assuming C: switching the root to G
   gives `shadedRoot()` = 7 and degrees `[7,9,10,0,2,4,5]` = G Dorian.
+
+## Round 5 — constrain + transpose, and a claim that had to be measured
+
+- **Human insight:** when translation is refused, the closest approximation is
+  constrain **plus a transpose**, because translation relocates the music to the
+  new tonic while a bare snap leaves it on the old one.
+- **Tested rather than assumed, and the first test said the opposite.** Using
+  `targetRoot − sourceRoot` directly (+7 for C→G) measured *worse* than not
+  shifting at all — 242 vs 104 summed |pitch difference| from a real translation.
+  The reason is that remap is **register-preserving**: it places the image at the
+  nearest register, so C→G is 5 **down**, not 7 up. Normalising the interval to
+  the nearest direction (|iv| ≤ 6) flipped the result decisively:
+  G Dorian 104→**4**, D Dorian 36→**4**, F Dorian 100→**4**, A♯ Dorian 39→**4**.
+  The residual 4 is the chromatic tones translation keeps and conform folds.
+- Had I implemented the obvious `target − source` without measuring, the feature
+  would have shipped making results *further* from the intent while looking
+  plausible. Recording that because the near-miss is the lesson.
+- **Implemented:** conform gains an optional "Transpose first (semitones)" field;
+  "Constrain to this scale instead" pre-fills it with `nearestInterval(root −
+  sourceRoot)`; the report shows `−5 transposed first`; switching transformation
+  clears it, since a shift belongs to the choice that set it. The shift is pure
+  arithmetic applied before the engine call, and the pairing chains through it so
+  before/after highlighting still maps to original notes.

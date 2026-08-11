@@ -263,7 +263,7 @@ const S = {
   input:null, analysis:null, scales:[], op:"none",
   root:0, scale:"Ionian", sourceRoot:0, sourceScale:"Ionian", tieBreak:"previous",
   shift:0, after:null, refDegrees:null, busy:false, sourceFromDetected:true,
-  foldChromatics:false, afterAnalysis:null,
+  foldChromatics:false, afterAnalysis:null, preTranspose:0,
 };
 
 /* ------------------------------ rail ------------------------------------- */
@@ -276,7 +276,10 @@ function buildOps() {
     const n = document.createElement("span"); n.className = "name"; n.textContent = o.name;
     const s = document.createElement("span"); s.className = "sub"; s.textContent = o.sub;
     b.append(n, s);
-    b.addEventListener("click", () => { S.op = o.id; syncRail(); recompute(); });
+    b.addEventListener("click", () => {
+      if (S.op !== o.id) S.preTranspose = 0;   // a shift belongs to the choice that set it
+      S.op = o.id; syncRail(); recompute();
+    });
     el.appendChild(b);
   }
 }
@@ -308,6 +311,12 @@ function markScaleCardinality() {
     opt.textContent = `${opt.value} (${n})${bad ? " ✕" : ""}`;
   }
   sel.classList.toggle("bad", need !== null && Number(sel.selectedOptions[0]?.dataset.n) !== need);
+}
+
+/* Signed interval to the same pitch class, never more than a tritone. */
+function nearestInterval(iv) {
+  iv = ((iv % 12) + 12) % 12;
+  return iv > 6 ? iv - 12 : iv;
 }
 
 const degreeCount = name => {
@@ -361,13 +370,23 @@ function syncRail() {
     });
     bindSel("srcRoot","sourceRoot",true); bindSel("srcScale","sourceScale");
   } else {
-    p.innerHTML = `<div class="field"><label for="tie">Ties resolve</label>
+    p.innerHTML = `<div class="field"><label for="pre">Transpose first (semitones)</label>
+        <input id="pre" type="number" placeholder="0" step="1" /></div>
+      <p class="hint">${S.preTranspose
+        ? `Moves the clip ${S.preTranspose > 0 ? "up" : "down"} ${Math.abs(S.preTranspose)} before snapping, so it lands on the new tonic instead of staying on the old one.`
+        : "Optional. Snapping alone keeps the old tonal centre; shifting first is what makes this a stand-in for translating."}</p>
+      <div class="field"><label for="tie">Ties resolve</label>
         <select id="tie">
           <option value="previous">Toward the previous note</option>
           <option value="down">Always down</option>
           <option value="up">Always up</option></select></div>
       <p class="hint">Proximity snap — it may merge neighbouring notes. In a major key every
         out-of-key note sits exactly between two key notes, so this setting decides all of them.</p>`;
+    $("pre").value = S.preTranspose || "";
+    $("pre").addEventListener("input", e => {
+      const v = parseInt(e.target.value, 10);
+      S.preTranspose = Number.isFinite(v) ? v : 0; syncRail(); recompute();
+    });
     $("tie").value = S.tieBreak; bindSel("tie","tieBreak");
   }
 
@@ -435,10 +454,23 @@ async function recompute() {
         ? { op:"conform_to_scale", scale:S.scale, rootPc:S.root, tieBreak:S.tieBreak }
         : { op:"remap_by_degree", sourceScale:S.sourceScale, sourceRoot:S.sourceRoot,
             targetScale:S.scale, targetRoot:S.root };
-      const out = await api("/transform", { ...body, notes:S.input.notes, bpm:S.input.bpm });
+
+      /* Conform can be preceded by a plain shift. That is what makes constrain a
+         real stand-in for translation: translation moves the music to the new
+         tonic, while a bare snap leaves it on the old one. Measured against a
+         possible translation, shifting first cuts the difference from ~100 to 4. */
+      const pre = S.op === "conform" ? (S.preTranspose | 0) : 0;
+      const source = pre
+        ? S.input.notes.map((n,i) => ({...n, pitch:n.pitch + pre, _i:i}))
+                       .filter(n => n.pitch >= 0 && n.pitch <= 127)
+        : S.input.notes.map((n,i) => ({...n, _i:i}));
+
+      const out = await api("/transform", {
+        ...body, notes: source.map(({_i, ...n}) => n), bpm:S.input.bpm });
       if (mine !== seq) return;
-      let notes = pairAfter(S.input.notes, out.report.edits);
-      let report = out.report;
+      let notes = pairAfter(source, out.report.edits)
+        .map((n, i) => ({ ...n, _i: source[i]._i }));   // keep ORIGINAL indices
+      let report = pre ? { ...out.report, pre_transpose: pre } : out.report;
 
       if (S.op === "remap" && S.foldChromatics) {
         // Compose two ENGINE operations rather than inventing a third: translate
@@ -703,6 +735,7 @@ function drawReport() {
     bits.push(`<span class="stat moved"><span class="n">${moved}</span><span class="k">moved</span></span>`);
     bits.push(`<span class="stat kept"><span class="n">${notes.length-moved}</span><span class="k">unchanged</span></span>`);
     if (r.ties_resolved) bits.push(`<span class="stat"><span class="n">${r.ties_resolved}</span><span class="k">ties</span></span>`);
+    if (r.pre_transpose) bits.push(`<span class="stat moved" title="Applied before snapping, so the clip lands on the new tonic."><span class="n">${r.pre_transpose > 0 ? "+" : ""}${r.pre_transpose}</span><span class="k">transposed first</span></span>`);
     if (r.notes_folded) bits.push(`<span class="stat moved" title="Conform pass after the translation snapped these still-chromatic tones into the scale."><span class="n">${r.notes_folded}</span><span class="k">folded in</span></span>`);
     if ((r.collisions||[]).length) bits.push(`<span class="stat clash"><span class="n">${r.collisions.length}</span><span class="k">collisions</span></span>`);
     if (dropped > 0) bits.push(`<span class="stat clash"><span class="n">${dropped}</span><span class="k">out of MIDI range</span></span>`);
@@ -817,6 +850,11 @@ function sendBack(result) {
   bindSel("tScale","scale");
   $("ovConstrain").addEventListener("click", () => {
     S.op = "conform";                       // same target scale, different intent
+    /* Pre-fill the shift that makes constrain approximate the translation the
+       user actually asked for. Normalised to the NEAREST direction (|iv| <= 6)
+       because remap is register-preserving — C to G is 5 down, not 7 up, and
+       using +7 measured *worse* than not shifting at all. */
+    S.preTranspose = nearestInterval(S.root - S.sourceRoot);
     buildOps(); syncRail(); recompute();
   });
   $("markOutside").addEventListener("change", () => { syncRail(); recompute(); });
