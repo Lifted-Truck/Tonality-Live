@@ -13,3 +13,4 @@ pull only the matching LIBRARY.md entries into context. One line per lesson.
 - [L0003] "tonality-core" (C++) is NOT our engine — it ports only the frozen set-class kernel; our provider is the Python `mts` — `tonality-integration`, `bridge-contract` (candidate)
 - [L0004] Load into Live by installing the .ablx (unzip to Extensions/<author>.<name>/, needs unsandboxed write); Developer Mode disables all other extensions; menu items nest under "Extensions" — `ableton-sdk-quirks`, `extension-lifecycle`, `macos-build-codesign` (candidate)
 - [L0005] Silence in ExtensionHost.txt ≠ failure — log in activate(); check main Live process before suspecting code — `extension-lifecycle`, `ableton-sdk-quirks` (candidate)
+- [L0006] Conform results come back onset-sorted (docstring says otherwise) — pair before/after via `report.edits`, never by position — `bridge-contract`, `tonality-integration` (candidate)

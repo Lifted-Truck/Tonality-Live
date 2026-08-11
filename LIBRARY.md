@@ -91,6 +91,26 @@ unverified). Entry format:
   installed extensions while Developer Mode is on.
 | supersedes: —
 
+[L0006] The engine returns conform results onset-sorted — never pair by position
+| tier: candidate | added: 2026-08-10
+| tags: bridge-contract, tonality-integration
+| lesson: `conform_to_scale` / `fit_to_key` return `events` **sorted by onset**,
+  not in the order they were sent, even though the docstring says "in the input's
+  note order". So `output[i]` is not `input[i]`. Writing the result to
+  `clip.notes` is unaffected (note order is meaningless in a MIDI clip) and
+  collision dedupe is safe (it keys on pitch+onset+duration), but ANY before/after
+  pairing must go through `report.edits`, matching `(onset, from_midi)` →
+  `to_midi`. A positional diff is silently wrong, not loudly wrong.
+| evidence: 20-note clip sent with block chords first, melody second — input
+  onsets `0,0,0,2,2,2,4,4,4,6,6,6,0,1,...` returned as `0,0,0,0,1,2,2,2,2,3,...`.
+  Positional comparison claimed 17 notes moved where the engine reported 10;
+  edit-based pairing reproduces the engine's counts exactly (2/8/10/3) with zero
+  unmatched edits. Filed upstream as brief tonality-live-002.
+| falsifier: the provider takes option (1) of that brief and assembles output by
+  original index — then input order IS preserved and positional pairing becomes
+  valid (but pairing via `edits` still works, so prefer it regardless).
+| supersedes: —
+
 [L0005] An extension that logs nothing looks exactly like one that failed
 | tier: candidate | added: 2026-08-10
 | tags: extension-lifecycle, ableton-sdk-quirks

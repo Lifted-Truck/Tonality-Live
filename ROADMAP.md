@@ -136,15 +136,33 @@ theory in this repo** — theory-driven alters go through the bridge's
   transformations with parameters in one view; before/after note preview drawn in
   HTML from the bridge's returned notes/edits/collisions; chained ops applied as
   one undo step; key/scale defaulted from Live's setting.
+- **Design constraint found while mocking up (load-bearing):** the engine returns
+  `events` **onset-sorted**, not in input order, despite its docstring claiming
+  input order. So `output[i]` is NOT `input[i]` — a positional before/after diff
+  is silently wrong (claimed 17 moved where the engine snapped 10). **Pair the
+  after-set to the before-set via `report.edits` on `(onset, from_midi)`**, which
+  reproduces the engine's own counts exactly for all four transforms tested.
+  Reported upstream as brief `tonality-live-002` (ball: provider); we are
+  unblocked either way.
+- **Mockup:** built 2026-08-10 with real engine output, working Web Audio
+  audition, before/after roll with move connectors, chord strip from `/analyze`.
+  Human reviewed it before the delivery mechanism was chosen.
+- **Ruled by the human 2026-08-10:** audition = **Web Audio preview inside the
+  dialog** (they confirmed other extensions do audition-in-popup, and that
+  transport playback is impossible); the workshop should show the current MIDI
+  with a full Tonality analysis, then a preview of the transformation applied.
+  Eventual target: **one command replaces all four**.
 - **Open questions (blocking, human):**
-  1. **What does "audition" mean here?** (a) synthesize a sketch in the dialog via
-     Web Audio — works inside the modal, but not the user's instrument; (b) write
-     candidates to a spare clip slot and audition with Live's real playback —
-     right sound, but breaks the single-modal flow; (c) visual + analytic only
-     (before/after roll, resulting key/chords, what moved) — no sound.
-  2. Do the four existing command IDs get **removed** (public-interface change,
-     §Domain protected) or kept alongside the workshop?
-  3. Does the workshop transform the clip in place, or always into a copy?
+  1. ~~What does "audition" mean~~ — RULED: Web Audio in the dialog.
+  2. ~~Do the four command IDs get removed~~ — RULED: yes, one replaces all four.
+     Still needs the §Domain protected-path sign-off at the point of removal.
+  3. **Delivery mechanism — still open.** Bridge-served page at
+     `http://localhost:8765/workshop` (real assets, same-origin `/analyze` +
+     `/transform`, no data-URL ceiling; but the workshop then requires the bridge,
+     including for transpose) **vs** one large inlined `data:` URL (no bridge
+     dependency for the page, but no assets and a fat payload per open).
+     `showModalDialog` accepts `file:`, `data:`, `https:`, `http://localhost`.
+  4. Does the workshop transform the clip in place, or always into a copy?
 - **Out of scope until ruled:** any implementation.
 
 ## Decision log
