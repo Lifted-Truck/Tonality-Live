@@ -135,6 +135,23 @@ theory in this repo** — theory-driven alters go through the bridge's
   (engine agrees: `notes_diatonic=18, notes_chromatic=2`). Conform flattens
   everything into the scale; remap is degree-preserving, so chromatic tones keep
   their alteration by design. The behaviour was right, the *label* was wrong.
+- **Round 3 of human feedback applied 2026-08-11** (trace:
+  traces/2026-08-11-workshop-feedback.md): a **piano keyboard gutter** down the
+  left of the roll — every lane named, in-scale lanes lit, so a scale can be read
+  off the edge; a **second chord strip** showing the engine's naming of the
+  *transformed* material beneath the detected one (C Ionian → C Dorian reads
+  `C maj → C min`, `A min → A dim`, `G maj → G min`); and **"fold chromatic tones
+  into the scale"** as a toggle inside Translate rather than an always-on
+  behaviour.
+- **How the fold toggle is implemented, and its honest limit:** `remap_by_degree`
+  has **no** chromatic option — preserving character is inherent to degree
+  mapping — and `modal_transform`'s policies are `("rhetoric", "strict")`, where
+  strict *refuses* on ambiguity rather than folding. So folding is a
+  **composition of two engine calls**: remap, then conform the still-chromatic
+  tones to the target. Labelled in the UI as "two engine steps — not a single
+  blessed operation". **Open question for the provider:** is composing
+  remap→conform the blessed idiom for this, or should the engine expose it
+  natively? Worth folding into the Q-008(b) conversation rather than a new brief.
 - **Prototype covers:** analysis-only default with Render disabled; conform /
   remap / transpose; live `/analyze` chord strip coloured by function; before/
   after roll with ghost outlines and move connectors; out-of-scale marking

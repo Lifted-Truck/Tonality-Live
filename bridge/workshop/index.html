@@ -52,8 +52,17 @@
   .hint{color:var(--ink-faint);font-size:9.5px;margin:3px 0 0;line-height:1.35}
 
   .main{flex:1;min-width:0;display:flex;flex-direction:column}
-  .chordstrip{height:26px;background:var(--sunk);border-bottom:1px solid #1e1e1e;
-              position:relative;overflow:hidden;flex:none}
+  /* --gutter is set from JS to exactly match the keyboard drawn in the canvas,
+     so the chord strips line up with the roll rather than merely looking close. */
+  .striprow{display:flex;align-items:stretch;flex:none;border-bottom:1px solid #1e1e1e;
+            background:var(--sunk)}
+  .striplabel{width:var(--gutter,92px);flex:none;display:flex;align-items:center;
+      justify-content:flex-end;padding-right:6px;font-family:var(--mono);font-size:8.5px;
+      letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);
+      border-right:1px solid #1e1e1e;background:var(--sunk-2)}
+  .striplabel.after{color:var(--accent)}
+  .chordstrip{height:26px;flex:1;min-width:0;background:var(--sunk);
+              position:relative;overflow:hidden}
   .chordstrip .seg{position:absolute;top:0;bottom:0;border-right:1px solid #101010;
       font-family:var(--mono);font-size:9.5px;color:var(--ink-dim);display:flex;
       align-items:center;padding-left:4px;white-space:nowrap;overflow:hidden}
@@ -158,7 +167,14 @@
   </div>
 
   <div class="main">
-    <div class="chordstrip" id="chords"></div>
+    <div class="striprow">
+      <span class="striplabel">before</span>
+      <div class="chordstrip" id="chords"></div>
+    </div>
+    <div class="striprow" id="afterRow" style="display:none">
+      <span class="striplabel after">after</span>
+      <div class="chordstrip" id="chordsAfter"></div>
+    </div>
     <div class="rollwrap">
       <canvas id="roll" width="1600" height="620"></canvas>
       <div class="playhead" id="playhead"></div>
@@ -246,6 +262,7 @@ const S = {
   input:null, analysis:null, scales:[], op:"none",
   root:0, scale:"Ionian", sourceRoot:0, sourceScale:"Ionian", tieBreak:"previous",
   shift:0, after:null, refDegrees:null, busy:false, sourceFromDetected:true,
+  foldChromatics:false, afterAnalysis:null,
 };
 
 /* ------------------------------ rail ------------------------------------- */
@@ -325,9 +342,17 @@ function syncRail() {
         <select id="srcScale" ${S.sourceFromDetected ? "disabled" : ""}>${
           S.scales.map(s => `<option value="${s.name}"${s.name===S.sourceScale?" selected":""}>${s.name} (${s.degrees.length})</option>`).join("")
         }</select></div>
+      <label class="check"><input type="checkbox" id="foldChrom" ${S.foldChromatics ? "checked" : ""} />
+        <span>Fold chromatic tones into the scale</span></label>
+      <p class="hint">${S.foldChromatics
+        ? "Runs a conform pass <em>after</em> the translation, so tones that stayed chromatic get snapped in. Two engine steps — not a single blessed operation."
+        : "Chromatic tones keep their alteration against the new scale (this is what remap is for)."}</p>
       <p class="hint">${S.sourceFromDetected && det ? `Locked to the detected key (${det}).<br>` : ""}
         Degree → degree, so a scale walk survives. Source and target must have the
         <strong>same number of notes</strong>; targets that don't are marked ✕.</p>`;
+    $("foldChrom").addEventListener("change", e => {
+      S.foldChromatics = e.target.checked; syncRail(); recompute();
+    });
     $("srcDetected").addEventListener("change", e => {
       S.sourceFromDetected = e.target.checked;
       if (S.sourceFromDetected) applyDetectedSource();
@@ -411,7 +436,24 @@ async function recompute() {
             targetScale:S.scale, targetRoot:S.root };
       const out = await api("/transform", { ...body, notes:S.input.notes, bpm:S.input.bpm });
       if (mine !== seq) return;
-      S.after = { notes: pairAfter(S.input.notes, out.report.edits), report: out.report };
+      let notes = pairAfter(S.input.notes, out.report.edits);
+      let report = out.report;
+
+      if (S.op === "remap" && S.foldChromatics) {
+        // Compose two ENGINE operations rather than inventing a third: translate
+        // by degree, then conform whatever stayed chromatic into the target.
+        // Pairing chains — the conform edits key off the post-remap pitches.
+        const folded = await api("/transform", {
+          op:"conform_to_scale", scale:S.scale, rootPc:S.root, tieBreak:S.tieBreak,
+          notes: notes.map(({_i, ...n}) => n), bpm:S.input.bpm });
+        if (mine !== seq) return;
+        const after2 = pairAfter(notes, folded.report.edits);
+        notes = after2.map((n, i) => ({ ...n, _i: notes[i]._i }));
+        report = { ...out.report, folded: folded.report,
+                   notes_folded: folded.report.notes_snapped,
+                   collisions: folded.report.collisions };
+      }
+      S.after = { notes, report };
     }
   } catch (err) {
     if (mine !== seq) return;
@@ -428,6 +470,17 @@ async function recompute() {
 
   await refreshReference();
   if (mine !== seq) return;
+
+  // Second chord strip = the engine naming the transformed material. Asking it
+  // rather than deriving names here keeps chord naming on the engine's side.
+  if (S.after) {
+    try {
+      const a = await api("/analyze", { notes:S.after.notes.map(({_i, ...n}) => n), bpm:S.input.bpm });
+      if (mine !== seq) return;
+      S.afterAnalysis = a.summary;
+    } catch (_) { S.afterAnalysis = null; }
+  } else S.afterAnalysis = null;
+  drawChords();
   $("render").disabled = !canRender || !S.after;
   $("playAfter").disabled = !S.after;
   draw(); drawReport();
@@ -470,25 +523,68 @@ function computeSpan() {
   LO = lo - 1; HI = hi + 1; BEATS = Math.max(1, Math.ceil(end));
 }
 
+/* Which degrees the lanes and keyboard light up for. conform's report carries
+   `degrees`; RemapResult does NOT (it carries `map` instead), so in translate
+   mode we build them from the engine's catalog entry for the chosen scale —
+   engine-supplied degrees offset by the root, which is arithmetic, not theory. */
+function shadedDegrees() {
+  if (S.op === "conform" && S.after && S.after.report && S.after.report.degrees)
+    return S.after.report.degrees;
+  if (S.op === "conform" || S.op === "remap") {
+    const entry = S.scales.find(s => s.name === S.scale);
+    if (entry) return entry.degrees.map(d => (S.root + d) % 12);
+  }
+  return S.refDegrees;
+}
+
+const GUTTER = 92;                     // canvas px reserved for the keyboard
+const BLACK = new Set([1, 3, 6, 8, 10]);
+const noteName = p => PC[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 2);
+
 function draw() {
   computeSpan();
   const W = cv.width, H = cv.height, lanes = HI - LO + 1, lh = H / lanes;
-  const bx = b => (b / BEATS) * W, ly = p => H - ((p - LO + 1) * lh);
+  const bx = b => GUTTER + (b / BEATS) * (W - GUTTER), ly = p => H - ((p - LO + 1) * lh);
   const inRef = p => S.refDegrees ? S.refDegrees.includes(((p % 12) + 12) % 12) : false;
-  const target = S.after && S.after.report ? S.after.report.degrees : null;
+  const target = shadedDegrees();
+  const lit = p => !!target && target.includes(((p % 12) + 12) % 12);
 
   g.clearRect(0,0,W,H);
   for (let p = LO; p <= HI; p++) {
-    const shaded = target ? target.includes(((p % 12) + 12) % 12) : false;
-    g.fillStyle = shaded ? "#2f2f38" : "#1b1b1b";
-    g.fillRect(0, ly(p), W, lh - 1);
-    if (p % 12 === 0) { g.strokeStyle = "#2b2b2b"; g.beginPath();
-      g.moveTo(0, ly(p)+lh); g.lineTo(W, ly(p)+lh); g.stroke(); }
+    g.fillStyle = lit(p) ? "#2f2f38" : "#1b1b1b";
+    g.fillRect(GUTTER, ly(p), W - GUTTER, lh - 1);
+    if (((p % 12) + 12) % 12 === 0) { g.strokeStyle = "#2b2b2b"; g.beginPath();
+      g.moveTo(GUTTER, ly(p)+lh); g.lineTo(W, ly(p)+lh); g.stroke(); }
   }
   for (let b = 0; b <= BEATS; b++) {
     g.strokeStyle = b % 4 === 0 ? "#3a3a3a" : "#262626";
     g.beginPath(); g.moveTo(bx(b),0); g.lineTo(bx(b),H); g.stroke();
   }
+
+  /* Keyboard gutter: every lane named, in-scale lanes lit. Black/white keys give
+     the shape you already read fluently; the accent tint says "in this scale",
+     so a scale can be read straight off the left edge. */
+  g.fillStyle = "#141414"; g.fillRect(0, 0, GUTTER, H);
+  const nameEvery = lh >= 11;            // when lanes get tight, label octaves only
+  g.textBaseline = "middle";
+  g.font = `${Math.min(12, Math.max(8, lh - 4))}px ui-monospace, Menlo, monospace`;
+  for (let p = LO; p <= HI; p++) {
+    const y = ly(p), black = BLACK.has(((p % 12) + 12) % 12), on = lit(p);
+    g.fillStyle = on ? (black ? "#6b5327" : "#c9a463") : (black ? "#242424" : "#4a4a4a");
+    g.fillRect(0, y + 1, GUTTER - 8, lh - 2);
+    g.strokeStyle = "#101010"; g.lineWidth = 1;
+    g.strokeRect(0.5, y + 1.5, GUTTER - 9, lh - 3);
+    if (nameEvery || ((p % 12) + 12) % 12 === 0) {
+      g.fillStyle = on ? "#1a1a1a" : (black ? "#8f8f8f" : "#1f1f1f");
+      g.fillText(noteName(p), 6, y + lh / 2);
+    }
+  }
+  g.strokeStyle = "#1e1e1e"; g.beginPath();
+  g.moveTo(GUTTER - 0.5, 0); g.lineTo(GUTTER - 0.5, H); g.stroke();
+  // The strips are DOM, the keyboard is canvas; lock them to the same width so
+  // a chord label always sits over the beat it describes.
+  document.documentElement.style.setProperty(
+    "--gutter", (GUTTER / W * cv.clientWidth) + "px");
 
   const shown = S.after ? S.after.notes : S.input.notes.map((n,i)=>({...n,_i:i}));
   const rounded = typeof g.roundRect === "function";
@@ -522,8 +618,14 @@ function draw() {
 }
 
 function drawChords() {
-  const el = $("chords"); el.innerHTML = "";
-  const ch = (S.analysis && S.analysis.chords) || [];
+  paintStrip($("chords"), (S.analysis && S.analysis.chords) || []);
+  const after = S.afterAnalysis && S.afterAnalysis.chords;
+  $("afterRow").style.display = after ? "" : "none";
+  if (after) paintStrip($("chordsAfter"), after);
+}
+
+function paintStrip(el, ch) {
+  el.innerHTML = "";
   ch.forEach((c,i) => {
     const start = c.onset ?? 0;
     const end = i+1 < ch.length ? (ch[i+1].onset ?? BEATS) : BEATS;
@@ -563,6 +665,7 @@ function drawReport() {
     bits.push(`<span class="stat moved"><span class="n">${moved}</span><span class="k">moved</span></span>`);
     bits.push(`<span class="stat kept"><span class="n">${notes.length-moved}</span><span class="k">unchanged</span></span>`);
     if (r.ties_resolved) bits.push(`<span class="stat"><span class="n">${r.ties_resolved}</span><span class="k">ties</span></span>`);
+    if (r.notes_folded) bits.push(`<span class="stat moved" title="Conform pass after the translation snapped these still-chromatic tones into the scale."><span class="n">${r.notes_folded}</span><span class="k">folded in</span></span>`);
     if ((r.collisions||[]).length) bits.push(`<span class="stat clash"><span class="n">${r.collisions.length}</span><span class="k">collisions</span></span>`);
     if (dropped > 0) bits.push(`<span class="stat clash"><span class="n">${dropped}</span><span class="k">out of MIDI range</span></span>`);
   } else {
@@ -697,6 +800,7 @@ function sendBack(result) {
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") { stopAll(); sendBack({notes:null}); }});
 
+  window.addEventListener("resize", () => draw());
   syncRail(); drawChords(); await recompute();
 })();
 </script>
