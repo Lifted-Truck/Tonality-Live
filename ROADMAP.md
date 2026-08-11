@@ -147,14 +147,27 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Mockup:** built 2026-08-10 with real engine output, working Web Audio
   audition, before/after roll with move connectors, chord strip from `/analyze`.
   Human reviewed it before the delivery mechanism was chosen.
-- **Fit-to-Key and Conform-to-Scale are ONE operation — expose one control.**
-  Verified byte-identical: `fit_to_key(C, major)` and
-  `conform_to_scale("Ionian", C)` return the same `notes` AND the same `edits`;
-  the engine's `fit_to_key` is a wrapper mapping major→Ionian, minor→Natural
-  Minor, and the report's `scale_name` reads `Ionian` either way. So the workshop
-  should offer **root + scale** as a single control with Major/Minor surfaced at
-  the top of the list, not two separate transformations. Collapses 2 of the 4
-  commands into one control.
+- **Fit-to-Key and Conform-to-Scale are ONE operation.** Verified byte-identical:
+  `fit_to_key(C, major)` and `conform_to_scale("Ionian", C)` return the same
+  `notes` AND the same `edits`; `fit_to_key` is a wrapper mapping major→Ionian,
+  minor→Natural Minor, and `scale_name` reads `Ionian` either way. So Fit to Key
+  is a *preset of* conform, not its own transformation.
+- **CORRECTION (2026-08-11) — do NOT collapse scale selection into one control.**
+  The line above previously concluded "therefore expose one root+scale control".
+  That inference was wrong and would have shipped a silent substitution: picking
+  a scale to *translate* into ("make this Dorian") would have run a proximity
+  snap. Provider notice `notice-conform-vs-remap.md` (adopted) draws the real
+  line — the two tools answer different questions and are distinguished by user
+  **intent**, which the signatures do not reveal:
+  | tool | question | character |
+  |---|---|---|
+  | `conform_to_scale` | make these notes *legal* in S | proximity, many-to-one, **lossy** — cleanup |
+  | `remap_by_degree` | *translate* this music into S | degree-preserving, bijective in-scale — translation |
+  Verified locally on a descending walk `G F E D C` → C Natural Minor: conform
+  gives `G F F D C` (E merges into F, walk destroyed **even at equal
+  cardinality**), remap gives `G F D♯ D C` (intact). So the workshop presents
+  *Clean up / constrain* and *Translate to scale or mode* as separate intents,
+  labelled with which one merges notes.
 - **Scale picker caveat:** the 37-name catalog contains three same-degree pairs —
   `Ionian`/`Major` and `Aeolian`/`Natural Minor` (true synonyms in 12-TET), and
   `Major Pentatonic`/`Pelog Selisir` (**not** synonyms — different musical
@@ -204,6 +217,36 @@ theory in this repo** — theory-driven alters go through the bridge's
     locally would duplicate the engine's catalog. Have the bridge pass the
     detected key's degrees through instead.
 - **Out of scope until ruled:** any implementation.
+
+### Q-007 — Expose `remap_by_degree` (+ `modal_transform`) on /transform
+- **Status:** open, ready. Prerequisite for the workshop being *correct* (Q-004),
+  so do it with or before the workshop. Adopted from provider notice
+  `notice-conform-vs-remap.md`; reply filed as `adopt-conform-vs-remap.md`.
+- **Why:** `/transform` currently exposes only conform (proximity). The engine has
+  shipped `remap_by_degree` — degree→degree translation, bijective on in-scale
+  material, walks survive by construction — and `modal_transform` for clips that
+  may contain key changes (builds per-area maps; leaves channel-10 drums alone).
+  Without remap, every "change the mode" request routes into a lossy snap.
+- **Scope:** `bridge/server.py` (`/transform` gains ops `remap_by_degree` and
+  `modal_transform`), `bridge/test_bridge.py`, `./verify` contract check.
+- **Acceptance criteria:**
+  1. `op: "remap_by_degree"` with `sourceScale`/`sourceRoot`/`targetScale`/
+     `targetRoot` returns `{notes, report}` in the established shape.
+  2. **Unequal cardinality is surfaced, not swallowed.** The engine refuses with a
+     legible `ValueError` ("no canonical degree correspondence between unequal
+     cardinalities"); the bridge maps that to a 4xx carrying the engine's own
+     reason string, and the consumer shows it as a UI state offering conform as
+     the alternative. Pin this in a test — the refusal is a feature.
+  3. A walk-preservation test: `G F E D C` → C Natural Minor keeps 5 distinct
+     pitches via remap and (documented, contrasting) merges via conform.
+  4. `modal_transform` wired for clips with key changes, or explicitly deferred
+     with a reason.
+- **Human gate at implementation:** `/transform` is a §Domain protected path; new
+  ops are a contract addition.
+- **Note for whoever wires it:** the MCP `remap_by_degree` takes
+  `events: list[list]`, while `conform_to_scale` takes a `Sequence`. The bridge
+  builds a Sequence today, so this needs a small adapter — the same
+  read-the-source-not-the-summary lesson as L0006.
 
 ### Q-006 — Context-aware transformation recommendations (vision, parked)
 - **Status:** parked vision — **not started, and mostly not ours to build.**

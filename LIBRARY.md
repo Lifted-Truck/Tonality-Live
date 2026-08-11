@@ -91,6 +91,32 @@ unverified). Entry format:
   installed extensions while Developer Mode is on.
 | supersedes: —
 
+[L0007] Conform ≠ remap: same-looking inputs, opposite operations
+| tier: candidate | added: 2026-08-11
+| tags: tonality-integration, bridge-contract
+| lesson: Two engine tools both take "a scale and a root" and return notes, and
+  choosing wrong silently gives the user something else. `conform_to_scale`
+  answers "make these notes LEGAL in S" — proximity, many-to-one, lossy, for
+  cleanup. `remap_by_degree` answers "TRANSLATE this into S" — degree→degree,
+  bijective on in-scale material, walks survive by construction. A user who picks
+  a scale from a dropdown to "make it Dorian" means **translate**; routing that
+  into conform destroys scale walks (and Ableton's own Scale tool has the same
+  failure, for the same reason). `fit_to_key` is merely a preset of conform.
+  **The two are distinguished by user intent, which the signatures do not reveal**
+  — so the UI must name the difference, including which one merges notes.
+  Unequal cardinality (7 degrees → 5) makes translation impossible by pigeonhole;
+  the engine refuses with a legible reason, and surfacing that refusal is correct
+  behaviour, not an error to hide.
+| evidence: descending walk `G F E D C` → C Natural Minor — conform returns
+  `G F F D C` (4 distinct of 5; destroyed even at EQUAL cardinality), remap
+  returns `G F D♯ D C` (5 distinct, intact); remap to Minor Pentatonic raises
+  ValueError. Provider notice notice-conform-vs-remap.md; adopt-conform-vs-remap.md.
+| falsifier: the engine gains a walk-aware conform, or span-policy knobs land
+  (their gap 31(b)/(c)) making unequal-cardinality translation possible — either
+  would change the routing advice, not the conform/remap distinction itself.
+| supersedes: — (but CORRECTS a same-day conclusion in this repo that fit/conform
+  equivalence implied one UI control; the equivalence is real, the inference was not)
+
 [L0006] The engine returns conform results onset-sorted — never pair by position
 | tier: candidate | added: 2026-08-10
 | tags: bridge-contract, tonality-integration
