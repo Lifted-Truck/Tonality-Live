@@ -147,6 +147,20 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Mockup:** built 2026-08-10 with real engine output, working Web Audio
   audition, before/after roll with move connectors, chord strip from `/analyze`.
   Human reviewed it before the delivery mechanism was chosen.
+- **Fit-to-Key and Conform-to-Scale are ONE operation — expose one control.**
+  Verified byte-identical: `fit_to_key(C, major)` and
+  `conform_to_scale("Ionian", C)` return the same `notes` AND the same `edits`;
+  the engine's `fit_to_key` is a wrapper mapping major→Ionian, minor→Natural
+  Minor, and the report's `scale_name` reads `Ionian` either way. So the workshop
+  should offer **root + scale** as a single control with Major/Minor surfaced at
+  the top of the list, not two separate transformations. Collapses 2 of the 4
+  commands into one control.
+- **Scale picker caveat:** the 37-name catalog contains three same-degree pairs —
+  `Ionian`/`Major` and `Aeolian`/`Natural Minor` (true synonyms in 12-TET), and
+  `Major Pentatonic`/`Pelog Selisir` (**not** synonyms — different musical
+  traditions that collapse to one pitch-class set only because Pelog's real
+  tuning isn't 12-TET). Group or annotate; do NOT dedupe by degree set, which
+  would erase a distinction that isn't ours to erase.
 - **Ruled by the human 2026-08-10:** audition = **Web Audio preview inside the
   dialog** (they confirmed other extensions do audition-in-popup, and that
   transport playback is impossible); the workshop should show the current MIDI
@@ -164,6 +178,41 @@ theory in this repo** — theory-driven alters go through the bridge's
      `showModalDialog` accepts `file:`, `data:`, `https:`, `http://localhost`.
   4. Does the workshop transform the clip in place, or always into a copy?
 - **Out of scope until ruled:** any implementation.
+
+### Q-006 — Context-aware transformation recommendations (vision, parked)
+- **Status:** parked vision — **not started, and mostly not ours to build.**
+  Recorded 2026-08-10 at the human's request; they noted it warrants a long
+  conversation and a wishlist to Tonality first.
+- **Intent (human):** the analysis uses smart context to *recommend*
+  transformations based on established patterns — key transition, tonicization,
+  re-voice, complexify or clean up harmony — possibly informed by
+  genre / instrument / part / song-section dropdowns.
+- **Boundary reading (why this is largely a Tonality ask, not a Tonality-Live one):**
+  - "Recommend a transformation because this looks like a ii–V" is
+    music-theoretic **judgment**. Per INTEGRATIONS rule 3 it belongs in the
+    engine. This repo must not grow a recommender; it renders and applies.
+  - Genre / instrument / section context are **priors**, and rule 4 requires
+    priors to be versioned and evidenced. "Jazz wants ♭9s" is an empirical claim
+    with a provenance burden, not a vibe — that is a real epistemic commitment
+    for Tonality, and the thing most likely to make this project expensive.
+  - **AI/deterministic boundary:** a recommender is *propose*, which AI may do —
+    but it must rest on deterministic analysis, and nothing model-generated may
+    sit in the transform path itself. Pin this before anyone reaches for an LLM
+    inside the note pipeline.
+  - Rule 7 (consume plural outputs): surface **ranked** candidates with the
+    engine's margins, not one collapsed "best" answer. The workshop already has
+    the shape for this — a recommendation list beside the transformation list.
+- **Where each named pattern already stands upstream (from their ROADMAP):**
+  modulation-path planning and scale/meter re-mapping are named Phase 7
+  extensions, generative-side; tonicization pivots exist (`pivots_between`);
+  `revoice` is deferred to Phase 7 (their Ruling 6); "complexify / clean up
+  harmony" is unscoped anywhere.
+- **Ours vs theirs:** ours = the context dropdowns, presenting ranked
+  recommendations, and applying the chosen one. Theirs = every judgment that
+  produces a recommendation.
+- **Next step when the human wants it:** draft a wishlist brief to Tonality on
+  the `integrations/Tonality-Live/` channel. Not filed yet — premature before the
+  conversation.
 
 ## Decision log
 
