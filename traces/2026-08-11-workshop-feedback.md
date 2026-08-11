@@ -67,3 +67,15 @@
   the accent tint means "in the scale" — so the tint reads as information rather
   than as the key's identity. Ink flipped to match (dark on light keys, light on
   dark ones).
+
+## Round 4 — tonic highlighting
+
+- Tonic lanes and keys now read distinctly from other in-scale ones: the key
+  wears the accent itself (other in-scale keys stay tan), its name is bold, and
+  the lane carries a stronger tint across the roll.
+- `shadedRoot()` deliberately mirrors `shadedDegrees()`'s source — target root
+  for conform/remap, the detected key's tonic when the display reference is the
+  detected key. If the two ever disagree the highlight would be lying about
+  which collection is being shown, so they are written to move together.
+- Verified it follows the root rather than assuming C: switching the root to G
+  gives `shadedRoot()` = 7 and degrees `[7,9,10,0,2,4,5]` = G Dorian.

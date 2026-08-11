@@ -195,6 +195,7 @@
       <span><i style="background:#e0a94e"></i>moved</span>
       <span><i style="border:1px solid #6a6a6a"></i>original position</span>
       <span><i style="background:#9b6bd4"></i>out of reference scale</span>
+      <span><i style="background:#ffa552"></i>tonic</span>
       <span><i style="background:#2f2f38"></i>in-scale lane</span>
     </div>
   </div>
@@ -537,6 +538,19 @@ function shadedDegrees() {
   return S.refDegrees;
 }
 
+/* The tonic of whatever collection the lanes are shaded against — the note the
+   scale is *named after*, which is what you actually look for when reading a
+   roll. Must follow the same source as shadedDegrees or the two disagree. */
+function shadedRoot() {
+  if (S.op === "conform" || S.op === "remap") return S.root;
+  if ($("refSel") && $("refSel").value === "detected") {
+    const k = S.analysis && S.analysis.key;
+    if (k) { const i = PC.indexOf(k.name.split(" ")[0]); if (i >= 0) return i; }
+    return null;
+  }
+  return S.refDegrees ? S.root : null;
+}
+
 const GUTTER = 56;                     // CSS px reserved for the keyboard
 
 /* The canvas backing store is sized to its ACTUAL displayed size (and DPR), so
@@ -564,11 +578,13 @@ function draw() {
   const bx = b => GUTTER + (b / BEATS) * (W - GUTTER), ly = p => H - ((p - LO + 1) * lh);
   const inRef = p => S.refDegrees ? S.refDegrees.includes(((p % 12) + 12) % 12) : false;
   const target = shadedDegrees();
+  const tonicPc = shadedRoot();
+  const isTonic = p => tonicPc !== null && ((p % 12) + 12) % 12 === tonicPc;
   const lit = p => !!target && target.includes(((p % 12) + 12) % 12);
 
   g.clearRect(0,0,W,H);
   for (let p = LO; p <= HI; p++) {
-    g.fillStyle = lit(p) ? "#2f2f38" : "#1b1b1b";
+    g.fillStyle = isTonic(p) ? "#3a3446" : (lit(p) ? "#2f2f38" : "#1b1b1b");
     g.fillRect(GUTTER, ly(p), W - GUTTER, lh - 1);
     if (((p % 12) + 12) % 12 === 0) { g.strokeStyle = "#2b2b2b"; g.beginPath();
       g.moveTo(GUTTER, ly(p)+lh); g.lineTo(W, ly(p)+lh); g.stroke(); }
@@ -588,14 +604,17 @@ function draw() {
   g.font = `${fs}px ui-monospace, Menlo, monospace`;
   for (let p = LO; p <= HI; p++) {
     const y = ly(p), black = BLACK.has(((p % 12) + 12) % 12), on = lit(p);
-    g.fillStyle = on ? (black ? "#a07c33" : "#d9b471")     // in the scale
-                     : (black ? "#232323" : "#9d9a94");    // ordinary black / white key
+    const tonic = isTonic(p);
+    g.fillStyle = tonic ? (black ? "#d98a1f" : "#ffa552")   // the tonic itself
+                : on   ? (black ? "#a07c33" : "#d9b471")    // else in the scale
+                       : (black ? "#232323" : "#9d9a94");   // ordinary key
     g.fillRect(0, y + 0.5, GUTTER - 6, Math.max(1, lh - 1));
     g.strokeStyle = "#101010"; g.lineWidth = 1;
     g.strokeRect(0.5, y + 1, GUTTER - 7, Math.max(1, lh - 2));
-    if (nameEvery || ((p % 12) + 12) % 12 === 0) {
-      // Dark ink on the light (white / lit) keys, light ink on the dark ones.
-      g.fillStyle = on ? "#1a1a1a" : (black ? "#9a9a9a" : "#242424");
+    if (nameEvery || ((p % 12) + 12) % 12 === 0 || tonic) {
+      // Dark ink on the light (white / lit / tonic) keys, light ink on dark ones.
+      g.fillStyle = (on || tonic) ? "#1a1a1a" : (black ? "#9a9a9a" : "#242424");
+      g.font = `${tonic ? "bold " : ""}${fs}px ui-monospace, Menlo, monospace`;
       g.fillText(noteName(p), 4, y + lh / 2);
     }
   }

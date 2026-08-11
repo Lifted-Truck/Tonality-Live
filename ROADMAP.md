@@ -300,6 +300,41 @@ theory in this repo** — theory-driven alters go through the bridge's
   takes a **`Sequence`** exactly like conform, so the bridge calls the generate
   layer and reuses `_sequence_from_payload` unchanged.
 
+### Q-010 — "Voice leading" transform with options (blocked upstream)
+- **Status:** open, **blocked on the provider** — this is `revoice`, which
+  Tonality deferred to their Phase 7 proper (their ROADMAP ~3758; our
+  `/transform` already answers a visible **501** for `op:"revoice"`, so the seam
+  exists and nothing needs inventing here).
+- **Intent (human, 2026-08-11):** a transform that re-voices the clip, with a
+  number of options.
+- **What already exists upstream, as separate primitives** (recon 2026-08-11):
+  - `segment_to_chords` — what chords are in this clip (temporal/harmonic_segmentation.py)
+  - `suggest_voicings(chord) -> VoicingSet` — candidate voicings (analysis/voicings.py)
+  - `voice_leading` / `voice_leading_realized` — **measure** motion between
+    voicings (analysis/voice_leading.py); `voice_leading_distance` as an MCP tool
+  - `voice_leading_policies()` — VL conventions exported as **named, versioned
+    policy ids** (`POLICY_DOUBLING_V1`) precisely because they are "a named
+    choice, not a fact"
+  So the ingredients are analysis-side and present; what is missing is the
+  composed **generative** step — choose voicings across a succession to minimise
+  motion, then place registers. That is exactly why they called it a project
+  rather than a slice.
+- **The "options" the human wants are the design questions the provider already
+  raised and explicitly could not answer for us** (response.md Ruling 6): what
+  does re-voicing a *melodic* clip mean versus a chordal one; keep or drop the
+  bass; re-voice **toward a target progression** or merely **smooth the existing
+  one**. Add the obvious knobs: register span, open/close voicing, doubling.
+  **These are the human's calls, not ours and not the engine's** — and answering
+  them is the prerequisite for a useful brief.
+- **Model the options the way the engine already models VL conventions:** named,
+  versioned, and cited in the result, so a rendered re-voicing is reproducible
+  and a later engine upgrade cannot silently change what a saved choice meant.
+- **Ours vs theirs:** ours = presenting the options, auditioning candidates,
+  applying the chosen one in one undo step. Theirs = every voicing decision.
+  Do **not** implement voicing selection here.
+- **Next step:** when the human answers the three questions above, file them on
+  the existing revoice thread. Nothing to build in this repo until then.
+
 ### Q-008 — Declared vs detected scale, and chromatic *character* in remaps
 - **Status:** open, not started. Two related asks from the human (2026-08-10).
 - **(a) Declared-vs-detected comparison.** Compare Live's *declared* clip/song
