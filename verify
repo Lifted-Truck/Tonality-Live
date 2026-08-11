@@ -124,6 +124,43 @@ print("  /transform -> %d notes, %d snapped, %d collision(s), tie_break=%s"
     echo "  FAIL: /transform response violated the notes+report contract" >&2
     return 1
   }
+  # /transform op=remap_by_degree. The walk G F E D C translated into natural
+  # minor must keep 5 DISTINCT pitches — remap preserves degrees where conform
+  # would merge. Checked live because it is the difference a user hears.
+  local remapped
+  remapped=$(curl -sf --max-time 5 -X POST "$BRIDGE_URL/transform" \
+    -H 'Content-Type: application/json' \
+    -d '{"op":"remap_by_degree","sourceScale":"Ionian","sourceRoot":0,"targetScale":"Natural Minor","targetRoot":0,"notes":[{"pitch":67,"startTime":0,"duration":1},{"pitch":65,"startTime":1,"duration":1},{"pitch":64,"startTime":2,"duration":1},{"pitch":62,"startTime":3,"duration":1},{"pitch":60,"startTime":4,"duration":1}]}' 2>/dev/null) || {
+    echo "  FAIL: /transform op=remap_by_degree did not respond 2xx" >&2
+    return 1
+  }
+  printf '%s' "$remapped" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+notes = d["notes"]
+pitches = [n["pitch"] for n in notes]
+assert len(notes) == 5, f"note count not preserved: {len(notes)}"
+assert len(set(pitches)) == 5, f"remap merged notes (walk destroyed): {pitches}"
+assert "edits" in d["report"], "report missing edits (needed for before/after pairing)"
+print("  /transform remap -> %s, %d distinct (walk intact)" % (pitches, len(set(pitches))))
+' || {
+    echo "  FAIL: /transform remap violated the walk-preservation contract" >&2
+    return 1
+  }
+
+  # The refusal is a feature: 7 degrees cannot translate into 5. Expect a 4xx
+  # carrying the engine's own reason, never a silent success.
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -X POST "$BRIDGE_URL/transform" \
+    -H 'Content-Type: application/json' \
+    -d '{"op":"remap_by_degree","sourceScale":"Ionian","sourceRoot":0,"targetScale":"Minor Pentatonic","targetRoot":0,"notes":[{"pitch":60,"startTime":0,"duration":1}]}' 2>/dev/null)
+  if [ "$code" = "400" ]; then
+    echo "  /transform remap 7->5 -> $code (refused, as designed)"
+  else
+    echo "  FAIL: unequal-cardinality remap returned $code, expected 400" >&2
+    return 1
+  fi
+
   echo "verify[full]: OK"
   return 0
 }

@@ -9,10 +9,11 @@ State lives here; conversations are ephemeral.
   (fit-to-key + conform-to-scale) are live end-to-end; harness retrofitted
   2026-07-13; Q-003 closed 2026-08-09.
 - **Oracle:** `./verify fast` = `tsc --noEmit` + 13 unit tests (transpose +
-  dedupeCollisions, node:test) + `py_compile`. `full` adds `npm run build` + 19
+  dedupeCollisions, node:test) + `py_compile`. `full` adds `npm run build` + 27
   bridge glue tests (unittest; skip when the engine is absent) + live
-  `/health` + `/analyze` + `/transform` contract checks (skipped-with-notice
-  when absent). Last full run 2026-08-09: green against a live bridge.
+  `/health` + `/analyze` + `/transform` contract checks — conform, remap
+  walk-preservation, and the unequal-cardinality refusal (skipped-with-notice
+  when absent). Last full run 2026-08-11: green against a live bridge.
   **Remaining gap:** no *automated* end-to-end test in a live Ableton (out of
   scope — no harness for it). Manually verified once, 2026-08-10: all four
   actions registered, both conform dialogs applied correctly, one-undo-step
@@ -219,9 +220,10 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Out of scope until ruled:** any implementation.
 
 ### Q-007 — Expose `remap_by_degree` (+ `modal_transform`) on /transform
-- **Status:** open, ready. Prerequisite for the workshop being *correct* (Q-004),
-  so do it with or before the workshop. Adopted from provider notice
-  `notice-conform-vs-remap.md`; reply filed as `adopt-conform-vs-remap.md`.
+- **Status:** done 2026-08-11 (trace: traces/2026-08-11-q007-remap.md). `remap_by_degree`
+  is live on `/transform`; `modal_transform` explicitly deferred with a reason
+  (criterion 4). Adopted from provider notice `notice-conform-vs-remap.md`;
+  reply filed as `adopt-conform-vs-remap.md`.
 - **Why:** `/transform` currently exposes only conform (proximity). The engine has
   shipped `remap_by_degree` — degree→degree translation, bijective on in-scale
   material, walks survive by construction — and `modal_transform` for clips that
@@ -230,23 +232,30 @@ theory in this repo** — theory-driven alters go through the bridge's
 - **Scope:** `bridge/server.py` (`/transform` gains ops `remap_by_degree` and
   `modal_transform`), `bridge/test_bridge.py`, `./verify` contract check.
 - **Acceptance criteria:**
-  1. `op: "remap_by_degree"` with `sourceScale`/`sourceRoot`/`targetScale`/
-     `targetRoot` returns `{notes, report}` in the established shape.
-  2. **Unequal cardinality is surfaced, not swallowed.** The engine refuses with a
+  1. ✅ `op: "remap_by_degree"` with `sourceScale`/`sourceRoot`/`targetScale`/
+     `targetRoot` returns `{notes, report}` in the established shape (report
+     carries `edits`, `map`, `notes_diatonic`/`notes_chromatic`; `events` popped
+     into `notes`).
+  2. ✅ **Unequal cardinality is surfaced, not swallowed.** The engine refuses with a
      legible `ValueError` ("no canonical degree correspondence between unequal
      cardinalities"); the bridge maps that to a 4xx carrying the engine's own
      reason string, and the consumer shows it as a UI state offering conform as
      the alternative. Pin this in a test — the refusal is a feature.
-  3. A walk-preservation test: `G F E D C` → C Natural Minor keeps 5 distinct
-     pitches via remap and (documented, contrasting) merges via conform.
-  4. `modal_transform` wired for clips with key changes, or explicitly deferred
-     with a reason.
-- **Human gate at implementation:** `/transform` is a §Domain protected path; new
-  ops are a contract addition.
-- **Note for whoever wires it:** the MCP `remap_by_degree` takes
-  `events: list[list]`, while `conform_to_scale` takes a `Sequence`. The bridge
-  builds a Sequence today, so this needs a small adapter — the same
-  read-the-source-not-the-summary lesson as L0006.
+  3. ✅ Walk-preservation pinned both ways: `G F E D C` → C Natural Minor keeps
+     5 distinct pitches via remap (`G F D♯ D C`) and merges via conform
+     (`G F F D C`) — the contrast is a test, so a change in either semantics
+     breaks the build rather than the user's clip.
+  4. ✅ `modal_transform` **explicitly deferred**, returning 501 with its reason:
+     its result is `{plan, application}` with per-note pairing in
+     `plan.decisions` rather than the flat `edits` list conform and remap share,
+     plus a chromatic-policy surface (`rhetoric`/`strict`) needing UI decisions.
+     Wiring it half-way would give the workshop a second, inconsistent diff shape.
+- **Human gate:** granted in session 2026-08-11 ("Let's see it") for the
+  `/transform` contract addition.
+- **Resolved on contact:** the anticipated adapter was unnecessary. The MCP
+  wrapper takes `events: list[list]`, but `mts.generate.remap.remap_by_degree`
+  takes a **`Sequence`** exactly like conform, so the bridge calls the generate
+  layer and reuses `_sequence_from_payload` unchanged.
 
 ### Q-006 — Context-aware transformation recommendations (vision, parked)
 - **Status:** parked vision — **not started, and mostly not ours to build.**

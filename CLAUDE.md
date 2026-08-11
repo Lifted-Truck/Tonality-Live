@@ -70,7 +70,10 @@ lists as protected.
 
 **What this is.** An Ableton Live 12 **Extension** (`.ablx`) that analyzes and
 alters MIDI clips. Right-click a MIDI clip → *Analyze with Tonality* (key,
-chords, functional roles) or *Transpose…* (shift N semitones, one undo step).
+chords, functional roles), *Transpose…* (shift N semitones), *Fit to Key…* or
+*Conform to Scale…* (snap out-of-scale notes; the engine decides, we dedupe the
+collisions it reports). Each write is one undo step. These four menu items are
+slated to collapse into a single "workshop" GUI — ROADMAP Q-004.
 Two subsystems: `extension/` (TypeScript, loaded by Live's Extension Host at
 edit time — NOT a real-time MIDI processor) and `bridge/` (a dependency-free
 local Python HTTP service). The extension is a thin client; **all music-theory
@@ -98,6 +101,12 @@ npm run build`. Run into Live: `npm start`. Package: `npm run package`.
   `mts`; adding a third-party dep is a human-gated decision.
 - **Boundary carries canonical data (rule 8).** Pitch-class / MIDI integers
   cross the bridge; note spelling and labels are display-layer only.
+- **Conform and remap are not interchangeable — route by user intent.**
+  `conform_to_scale` makes notes *legal* in a scale (proximity, lossy, may merge
+  neighbours); `remap_by_degree` *translates* into a scale (degree→degree,
+  bijective in-scale, walks survive). "Make this Dorian" means remap; sending it
+  to conform silently destroys scale walks. Never paper over the engine's
+  unequal-cardinality refusal — surface it (LIBRARY L0007).
 - **Consume-when-connected, degrade visibly (rule 2).** The extension must
   fail with a clear "start the bridge" message, never silently; `./verify
   full` skips the bridge check with a printed notice when the engine is absent.
@@ -112,12 +121,14 @@ binaries); `extension/manifest.json` and the extension's public command IDs
 
 **Verify targets.** `fast` (~seconds): `tsc --noEmit` + 13 unit tests (transpose
 + dedupeCollisions, node:test via tsx) + `py_compile`. `full` (~10–20s): fast +
-`npm run build` + 19 bridge glue tests (stdlib unittest — marshalling, summary
-shaping, transform dispatch; **skip** when the engine is absent) + live
-`/health` + `/analyze` + `/transform` contract checks, **skipped-with-notice**
-when the Tonality venv/bridge is unreachable (degraded, not red). Test stack is
-zero-dependency by decision. Remaining gap: no end-to-end test inside a live
-Ableton (out of scope).
+`npm run build` + 27 bridge glue tests (stdlib unittest — marshalling, summary
+shaping, transform dispatch, conform-vs-remap semantics; **skip** when the engine
+is absent) + live `/health` + `/analyze` + `/transform` contract checks (conform,
+remap walk-preservation, and the unequal-cardinality refusal),
+**skipped-with-notice** when the Tonality venv/bridge is unreachable (degraded,
+not red). Test stack is zero-dependency by decision. Remaining gap: no
+*automated* end-to-end test inside a live Ableton (out of scope — no harness);
+manually verified once, 2026-08-10.
 
 <!-- KNOWLEDGE-LOOP:START -->
 ## Self-Improving Knowledge Loop

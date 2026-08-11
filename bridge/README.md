@@ -76,6 +76,39 @@ curl -s -X POST localhost:8765/transform -H 'Content-Type: application/json' \
 |------|----------|----------|
 | `fit_to_key` | `tonicPc` (0–11), `mode` (`major`\|`minor`) | `tieBreak` |
 | `conform_to_scale` | `rootPc` (0–11), `scale` (catalog name from `/scales`, or a degree list) | `tieBreak` |
+| `remap_by_degree` | `sourceScale`, `sourceRoot`, `targetScale`, `targetRoot` | — |
+
+### Conform vs remap — pick by *intent*, they are not interchangeable
+
+Both take "a scale and a root" and return notes, so it is easy to reach for the
+wrong one. They answer different questions:
+
+| | question | character |
+|---|---|---|
+| `conform_to_scale` | make these notes **legal** in S | proximity, many-to-one, **lossy** — cleanup |
+| `remap_by_degree` | **translate** this music into S | degree→degree, bijective in-scale — translation |
+
+A descending walk `G F E D C` into C natural minor:
+
+```
+conform  ->  G F F D C     E merges into F — the walk is destroyed
+remap    ->  G F D# D C     five distinct notes — the walk survives
+```
+
+Conform is not broken there; proximity snapping is what it *is* (Ableton's own
+Scale tool behaves identically). But a user who asks to "make this Dorian" means
+**translate**, so route scale/mode changes through `remap_by_degree`. Keep conform
+for constraining incoming material to a key and cleaning stray accidentals.
+
+`remap_by_degree` requires **equal cardinality**: seven degrees cannot translate
+into five (pigeonhole), so the engine refuses and the bridge returns **400** with
+the engine's own reason. That refusal is deliberate — a surfaceable "this can't
+translate, use conform (it will merge)" beats a silently mangled walk.
+
+`modal_transform` (for clips containing key changes) is **not wired yet** and
+returns **501**: its result is `{plan, application}` with per-note pairing in
+`plan.decisions` rather than the flat `edits` list conform and remap share, plus a
+chromatic-policy surface that needs UI decisions first.
 
 `tieBreak` is `previous` (default — resolve toward the previous note in the
 voice), `down`, or `up`. It matters more than it sounds: in a major key **every**

@@ -211,6 +211,95 @@ class TransformMarshalling(unittest.TestCase):
 
 
 @unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
+class RemapByDegree(unittest.TestCase):
+    """/transform op=remap_by_degree — TRANSLATION, not cleanup.
+
+    The distinction these tests exist to protect: conform snaps by proximity and
+    can merge neighbours; remap maps degree→degree and cannot. Routing a
+    "make this Dorian" request into conform silently destroys scale walks
+    (provider notice notice-conform-vs-remap.md, adopted 2026-08-11).
+    """
+
+    # A descending scale walk: one scale step per note. The shape that exposes
+    # the difference, and the shape the human actually broke in Live.
+    WALK = {"notes": [{"pitch": p, "startTime": i, "duration": 1}
+                      for i, p in enumerate([67, 65, 64, 62, 60])]}  # G F E D C
+
+    def _remap(self, target, root=0, source="Ionian", source_root=0, **kw):
+        return server.transform({**self.WALK, "op": "remap_by_degree",
+                                 "sourceScale": source, "sourceRoot": source_root,
+                                 "targetScale": target, "targetRoot": root, **kw})
+
+    def test_walk_survives_remap(self):
+        out = self._remap("Natural Minor")
+        got = [n["pitch"] for n in out["notes"]]
+        self.assertEqual(got, [67, 65, 63, 62, 60])          # G F D# D C
+        self.assertEqual(len(set(got)), 5, "remap must not merge notes")
+
+    def test_conform_merges_the_same_walk(self):
+        """The contrast, pinned. Not a bug in conform — it is what proximity IS.
+
+        If this ever stops merging, the engine's conform semantics changed and the
+        UI's 'this one may merge notes' labelling needs revisiting.
+        """
+        out = server.transform({**self.WALK, "op": "conform_to_scale",
+                                "scale": "Natural Minor", "rootPc": 0})
+        got = [n["pitch"] for n in out["notes"]]
+        self.assertEqual(got, [67, 65, 65, 62, 60])           # E merged into F
+        self.assertLess(len(set(got)), 5, "conform is expected to merge here")
+
+    def test_identity_remap_changes_nothing(self):
+        # Compare by onset, not by list position: output comes back in the
+        # engine's canonical (onset, midi) order, which is NOT the wire order
+        # (tonality-live-002). An earlier draft of this test asserted a
+        # pitch-sorted list and failed for exactly that reason.
+        out = self._remap("Ionian")
+        self.assertEqual({n["startTime"]: n["pitch"] for n in out["notes"]},
+                         {n["startTime"]: n["pitch"] for n in self.WALK["notes"]})
+        self.assertEqual(out["report"]["edits"], [])
+
+    def test_returns_note_descriptions_and_a_report(self):
+        out = self._remap("Natural Minor")
+        for note in out["notes"]:
+            self.assertEqual(set(note), {"pitch", "startTime", "duration", "velocity"})
+        self.assertNotIn("events", out["report"])
+        for key in ("edits", "notes_total", "notes_diatonic", "notes_chromatic"):
+            self.assertIn(key, out["report"])
+
+    def test_edits_pair_on_onset_and_from_midi(self):
+        # The documented pairing idiom (tonality-live-002): events come back in
+        # the engine's canonical order, so never pair by list position.
+        out = self._remap("Natural Minor")
+        edits = out["report"]["edits"]
+        self.assertEqual([(e["onset"], e["from_midi"], e["to_midi"]) for e in edits],
+                         [(2.0, 64, 63)])
+
+    def test_unequal_cardinality_is_refused_with_a_reason(self):
+        # A refusal the UI can surface beats a silently broken walk. The engine
+        # owns the reason string; we must not swallow or paraphrase it.
+        with self.assertRaises(ValueError) as ctx:
+            self._remap("Minor Pentatonic")
+        msg = str(ctx.exception).lower()
+        self.assertIn("cardinality", msg)
+        self.assertIn("7", msg)
+        self.assertIn("5", msg)
+
+    def test_missing_parameters_are_rejected(self):
+        for omit in ("sourceScale", "sourceRoot", "targetScale", "targetRoot"):
+            body = {**self.WALK, "op": "remap_by_degree", "sourceScale": "Ionian",
+                    "sourceRoot": 0, "targetScale": "Dorian", "targetRoot": 0}
+            del body[omit]
+            with self.assertRaises(ValueError, msg=f"omitting {omit} should raise"):
+                server.transform(body)
+
+    def test_modal_transform_is_visibly_deferred(self):
+        # 501, not a silent fallback to remap — see the op's comment for why.
+        with self.assertRaises(NotImplementedError):
+            server.transform({**self.WALK, "op": "modal_transform",
+                              "targetScale": "Dorian"})
+
+
+@unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
 class ScaleCatalog(unittest.TestCase):
     def test_scales_are_served_from_the_engine(self):
         out = server.scales()

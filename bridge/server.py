@@ -45,6 +45,7 @@ if os.path.isdir(os.path.join(_TONALITY_REPO, "mts")):
 
 from mts.core.pitch import Pitch
 from mts.generate.conform import conform_to_scale, fit_to_key
+from mts.generate.remap import remap_by_degree
 from mts.io.loaders import load_scales
 from mts.io.midi import sequence_to_midi_file
 from mts.mcp.tools import midi_file_analysis
@@ -222,13 +223,43 @@ def transform(payload: dict) -> dict:
         result = conform_to_scale(
             sequence, scale, int(payload["rootPc"]), tie_break=tie_break
         )
+    elif op == "remap_by_degree":
+        # TRANSLATION, not cleanup: degree N of the source becomes degree N of the
+        # target, so scale walks survive by construction. This is the op a user
+        # means by "make this Dorian" — conform would snap by proximity and
+        # silently merge notes (provider notice notice-conform-vs-remap.md).
+        for required in ("sourceScale", "sourceRoot", "targetScale", "targetRoot"):
+            if required not in payload:
+                raise ValueError(f"remap_by_degree needs {required!r}.")
+        # Unequal cardinality raises ValueError from the engine; we let it through
+        # to a 400 carrying the engine's own reason. A surfaceable refusal beats a
+        # silently broken walk — see the tests.
+        result = remap_by_degree(
+            sequence,
+            payload["sourceScale"],
+            int(payload["sourceRoot"]),
+            payload["targetScale"],
+            int(payload["targetRoot"]),
+        )
+    elif op == "modal_transform":
+        # Deliberately deferred, not forgotten (ROADMAP Q-007 criterion 4). The
+        # engine ships it, but its result is {plan, application} with the
+        # per-note pairing living in plan.decisions rather than the flat `edits`
+        # list conform/remap share — and it carries a chromatic-policy surface
+        # ("rhetoric"/"strict") that needs UI decisions first. Wiring it half-way
+        # would give the workshop a second, inconsistent diff shape.
+        raise NotImplementedError(
+            "modal_transform is not wired yet (needs plan.decisions pairing + a "
+            "chromatic-policy UI); use remap_by_degree for single-key clips"
+        )
     elif op == "revoice":
         # Deferred upstream to Tonality's Phase 7 proper — progression
         # realization, not a snap. Stays a visible 501 (never faked locally).
         raise NotImplementedError("revoice is not implemented in the engine yet")
     else:
         raise ValueError(
-            f"unknown op {op!r} — expected 'fit_to_key' or 'conform_to_scale'."
+            f"unknown op {op!r} — expected 'fit_to_key', 'conform_to_scale' "
+            f"or 'remap_by_degree'."
         )
 
     report = result.to_dict()
