@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -267,6 +268,90 @@ def transform(payload: dict) -> dict:
     return {"notes": notes, "report": report}
 
 
+# --- workshop UI (Q-004 prototype) ---------------------------------------------
+#
+# `showModalDialog` accepts `http://localhost`, so the bridge can serve the
+# workshop as a real page instead of a fat inlined data: URL. Two rules keep the
+# choice reversible (ROADMAP Q-004): the page never assumes where its input came
+# from (one `loadInput()` seam), and the bridge base URL is INJECTED rather than
+# read from `location.origin` — a data: page has an opaque origin.
+
+_WORKSHOP_HTML = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "workshop", "index.html")
+
+# Short-lived note handoff. The dialog cannot call back into the extension, so
+# the extension parks the clip here and passes an id in the URL. Capped because
+# a long Live session would otherwise accumulate clips forever.
+_SESSIONS: dict[str, dict] = {}
+_SESSION_CAP = 32
+
+_DEMO_CLIP = {
+    "bpm": 110,
+    "notes": [
+        {"pitch": p, "startTime": s, "duration": d, "velocity": v}
+        for p, s, d, v in [
+            (60, 0, 1.8, 88), (64, 0, 1.8, 80), (67, 0, 1.8, 78),
+            (57, 2, 1.8, 86), (60, 2, 1.8, 78), (64, 2, 1.8, 76),
+            (53, 4, 1.8, 86), (57, 4, 1.8, 78), (60, 4, 1.8, 76),
+            (55, 6, 1.8, 88), (59, 6, 1.8, 80), (62, 6, 1.8, 78),
+            (72, 0, 0.9, 104), (71, 1, 0.9, 98), (69, 2, 0.9, 100),
+            (68, 3, 0.9, 96), (67, 4, 0.9, 100), (65, 5, 0.9, 94),
+            (66, 6, 0.9, 98), (67, 7, 0.9, 102),
+        ]
+    ],
+}
+
+
+def put_session(payload: dict) -> str:
+    """Park a clip for the workshop page and return its id."""
+
+    if not isinstance(payload.get("notes"), list) or not payload["notes"]:
+        raise ValueError("session needs a non-empty 'notes' array.")
+    if len(_SESSIONS) >= _SESSION_CAP:
+        for stale in list(_SESSIONS)[: len(_SESSIONS) - _SESSION_CAP + 1]:
+            _SESSIONS.pop(stale, None)
+    # Not a security token — it only names a clip already on this machine, in a
+    # service bound to loopback. Uniqueness is all that is required.
+    sid = "s%d" % (len(_SESSIONS) + abs(hash(repr(payload["notes"][:2]))) % 100000)
+    _SESSIONS[sid] = payload
+    return sid
+
+
+def get_session(sid: str) -> dict:
+    """A parked clip, or the built-in demo so the page opens standalone."""
+
+    if sid == "demo":
+        # Development affordance, deliberately labelled: lets the workshop be
+        # opened in a plain browser with no Live and no extension attached.
+        return {**_DEMO_CLIP, "demo": True}
+    if sid not in _SESSIONS:
+        raise KeyError(f"no such session {sid!r} (it may have been evicted)")
+    return _SESSIONS[sid]
+
+
+_LOOPBACK_HOST = re.compile(r"^(localhost|127\.0\.0\.1)(:\d+)?$")
+
+
+def workshop_page(request_host: str | None = None) -> bytes:
+    """The workshop HTML with the bridge base URL injected (never inferred).
+
+    Prefer the host the request actually arrived on: a page served from
+    ``localhost`` that then fetches ``127.0.0.1`` is cross-origin and pays a CORS
+    preflight on every POST. Same-origin avoids that entirely.
+
+    The Host header is attacker-influenced in general, and this value becomes the
+    page's fetch base — so accept it only when it is a loopback name, and fall
+    back to our own configured address otherwise.
+    """
+
+    base = f"http://{HOST}:{PORT}"
+    if request_host and _LOOPBACK_HOST.match(request_host):
+        base = f"http://{request_host}"
+    with open(_WORKSHOP_HTML, "rb") as fh:
+        html = fh.read()
+    return html.replace(b"__TONALITY_BASE__", base.encode())
+
+
 def scales() -> dict:
     """The engine's scale catalog, for the extension's picker.
 
@@ -297,16 +382,48 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_html(self, code: int, data: bytes) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")  # dev loop: always fresh
+        self.end_headers()
+        self.wfile.write(data)
+
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw or b"{}")
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        # CORS preflight. Not optional: a data:-delivered workshop has an opaque
+        # origin, so every POST it makes is cross-origin and preflighted first.
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
-        if self.path == "/health":
+        path = self.path.split("?", 1)[0]
+        if path == "/health":
             self._send(200, {"ok": True, "mts": _MTS_VERSION})
-        elif self.path == "/scales":
+        elif path == "/scales":
             self._send(200, scales())
+        elif path == "/workshop":
+            # Exactly one file, named in code — no path is taken from the request,
+            # so there is no traversal surface to defend.
+            try:
+                self._send_html(200, workshop_page(self.headers.get("Host")))
+            except OSError as exc:
+                self._send(500, {"error": f"workshop page unavailable: {exc}"})
+        elif path.startswith("/session/"):
+            try:
+                self._send(200, get_session(path[len("/session/"):]))
+            except KeyError as exc:
+                self._send(404, {"error": str(exc)})
         else:
             self._send(404, {"error": f"no route for GET {self.path}"})
 
@@ -321,6 +438,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, analyze(payload))
             elif self.path == "/transform":
                 self._send(200, transform(payload))
+            elif self.path == "/session":
+                self._send(200, {"session": put_session(payload)})
             else:
                 self._send(404, {"error": f"no route for POST {self.path}"})
         except NotImplementedError as exc:

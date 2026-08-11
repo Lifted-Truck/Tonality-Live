@@ -113,9 +113,18 @@ theory in this repo** — theory-driven alters go through the bridge's
   HTML, not reachable from node:test). Verified by DOM check + in-Live measurement.
 
 ### Q-004 — Collapse the extension into one "workshop" GUI
-- **Status:** open — **BLOCKED on a human ruling** (see open questions). Do not
-  start: the acceptance criteria for "audition" cannot be written until the
-  audition mechanism is chosen, and the SDK constrains that choice hard.
+- **Status:** in progress — **working prototype, bridge-served** (trace:
+  traces/2026-08-11-workshop-prototype.md). Live at
+  `http://localhost:8765/workshop`, driven end-to-end in a browser against the
+  real engine. Still to do before it can replace the four commands: wire the
+  extension command + session handoff, and remove the old items (protected path).
+- **Prototype covers:** analysis-only default with Render disabled; conform /
+  remap / transpose; live `/analyze` chord strip coloured by function; before/
+  after roll with ghost outlines and move connectors; out-of-scale marking
+  against either the detected key or the target scale; the unequal-cardinality
+  refusal as a first-class UI state carrying the engine's own reason; Web Audio
+  audition with playhead. Both portability rules honoured (`loadInput()` seam,
+  injected base URL).
 - **Intent (human, 2026-08-10):** replace the four separate context-menu commands
   with a *single* menu command that opens a workshop GUI which offers and
   auditions transformations, with a render button to commit them.
@@ -256,6 +265,52 @@ theory in this repo** — theory-driven alters go through the bridge's
   wrapper takes `events: list[list]`, but `mts.generate.remap.remap_by_degree`
   takes a **`Sequence`** exactly like conform, so the bridge calls the generate
   layer and reuses `_sequence_from_payload` unchanged.
+
+### Q-008 — Declared vs detected scale, and chromatic *character* in remaps
+- **Status:** open, not started. Two related asks from the human (2026-08-10).
+- **(a) Declared-vs-detected comparison.** Compare Live's *declared* clip/song
+  scale (`song.rootNote` / `scaleName` / `scaleMode`) against the engine's
+  *detected* key from `/analyze`, and show agreement or disagreement. The
+  disagreement is the interesting signal — a clip declared C major that analyses
+  as A minor, or one whose declared scale was never updated after an edit.
+  The workshop already has both readings specced as separate reference sources
+  (Q-004); this item is surfacing the *comparison* as a first-class readout.
+  **Needs:** the extension to pass Live's declared scale into the workshop
+  session (the page cannot reach the SDK), plus `/analyze` returning the detected
+  key's **degrees** rather than only `{name, score, margin}`.
+- **(b) Preserve chromatic character through transforms.** A toggle to treat
+  out-of-scale notes as *tonicizations / transition tones / chromatic colour* and
+  keep that character through a remap, instead of folding them into the target.
+  **Do not build this here** — it is theory, and the engine already models it:
+  `RemapEdit` carries `degree`, `alteration`, `tied_attachment` and
+  `attachment_note`; `RemapResult` carries `absorbed_alterations`; and
+  `modal_transform` takes a **`chromatic` policy** (`"rhetoric"` vs `"strict"`)
+  which appears to be exactly this switch. So (b) most likely = wiring
+  `modal_transform` (deferred in Q-007) and exposing its policy, NOT new logic.
+  **Verify that reading with the provider before scoping.**
+- **Open question:** does "preserve character" mean *don't move it* (leave the
+  chromatic tone where it is) or *move it so it keeps the same relationship to
+  the new scale*? These differ audibly, and the answer is the human's, not ours.
+
+### Q-009 — Recommend key changes and transition chords; optional generated example
+- **Status:** open, not started. Human ask (2026-08-10). Sibling of Q-006 and
+  probably wants filing alongside it.
+- **Intent:** recommend key changes and transition chords to *follow* the current
+  clip — what comes next, rather than what to fix in place — with an option to
+  generate a placeholder example demonstrating the suggestion.
+- **The generator already exists and is not ours:**
+  `~/Documents/Claude/synthetic-worlds/wend` (github.com/Lifted-Truck/Wend) is a
+  "conditional generative sequencer" whose README lists **pivot modulation** and
+  **secondary-dominant tonicization** among its primitives, driven by a rule DSL,
+  emitting MIDI plus a decision trace — and it already takes its theory from
+  Tonality "through a single oracle seam". It also has a `--serve` playground, so
+  it has a server mode to talk to.
+- **Boundary reading:** the *recommendation* ("modulate to the relative minor via
+  this pivot") is theory → Tonality (same argument as Q-006). The *realization*
+  (an actual 4-bar example) is generation → Wend. Tonality-Live is the third
+  party that displays and auditions the result. So this is a **two-provider**
+  integration and needs briefs to both, not code here.
+- **Do not** reimplement pivot selection or example generation in this repo.
 
 ### Q-006 — Context-aware transformation recommendations (vision, parked)
 - **Status:** parked vision — **not started, and mostly not ours to build.**

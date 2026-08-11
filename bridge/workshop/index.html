@@ -1,0 +1,613 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Tonality Workshop</title>
+<style>
+  /* Single-theme on purpose: this panel lives inside Ableton Live. */
+  :root {
+    --panel:#363636; --panel-2:#303030; --sunk:#232323; --sunk-2:#1b1b1b;
+    --line:#454545; --line-soft:#3d3d3d;
+    --ink:#c9c9c9; --ink-dim:#8a8a8a; --ink-faint:#6a6a6a;
+    --accent:#ffa552; --accent-ink:#1a1a1a;
+    --kept:#6f9f7c; --moved:#e0a94e; --clash:#c9705c; --outside:#9b6bd4;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Helvetica,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--panel);color:var(--ink);font:12px/1.45 var(--sans);
+       -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:12px;padding:8px 11px;background:var(--panel-2);
+         border-bottom:1px solid #1e1e1e;flex:none}
+  header h1{font-size:12.5px;margin:0;font-weight:650}
+  .clip{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);background:var(--sunk);
+        padding:2px 7px;border-radius:3px}
+  .demo{background:#3a3327;color:var(--accent)}
+  header .spacer{flex:1}
+  .keyread{display:flex;align-items:baseline;gap:6px;font-family:var(--mono);font-size:10.5px}
+  .keyread .lbl{color:var(--ink-faint);text-transform:uppercase;letter-spacing:.09em;font-size:9px}
+  .keyread .val{color:var(--accent);font-weight:650;font-size:12px}
+
+  .body{display:flex;flex:1;min-height:0}
+  .rail{width:238px;flex:none;background:var(--panel-2);border-right:1px solid #1e1e1e;
+        padding:9px;overflow-y:auto}
+  .sect{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);
+        margin:6px 0 4px 2px}
+  .op{display:block;width:100%;text-align:left;cursor:pointer;background:var(--sunk);
+      color:var(--ink);border:1px solid transparent;border-radius:3px;padding:6px 9px;
+      font:inherit;margin-bottom:3px}
+  .op:hover{background:#2a2a2a}
+  .op[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:#d98a3c}
+  .op .name{display:block;font-weight:600}
+  .op .sub{display:block;font-family:var(--mono);font-size:9.5px;opacity:.72;margin-top:1px}
+  .field{margin-bottom:6px}
+  .field label{display:block;color:var(--ink-faint);font-size:10px;margin-bottom:2px}
+  select,input[type=number]{width:100%;background:var(--sunk-2);color:var(--ink);
+      border:1px solid #151515;border-radius:3px;padding:4px 6px;font:inherit;font-size:11.5px}
+  .params{margin-top:7px;border-top:1px solid var(--line-soft);padding-top:7px}
+  .check{display:flex;align-items:center;gap:6px;margin:5px 0;cursor:pointer;font-size:11.5px}
+  .check input{accent-color:var(--accent)}
+  .hint{color:var(--ink-faint);font-size:9.5px;margin:3px 0 0;line-height:1.35}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .chordstrip{height:26px;background:var(--sunk);border-bottom:1px solid #1e1e1e;
+              position:relative;overflow:hidden;flex:none}
+  .chordstrip .seg{position:absolute;top:0;bottom:0;border-right:1px solid #101010;
+      font-family:var(--mono);font-size:9.5px;color:var(--ink-dim);display:flex;
+      align-items:center;padding-left:4px;white-space:nowrap;overflow:hidden}
+  .seg.tonic{background:#2c3630;color:#9fc4aa}
+  .seg.dominant{background:#3a3327;color:var(--accent)}
+  .seg.predominant{background:#2f3340;color:#9db0d4}
+  .seg.trivial{background:#202020;color:#4a4a4a}
+  .rollwrap{flex:1;position:relative;background:var(--sunk-2);min-height:0}
+  canvas{display:block;width:100%;height:100%}
+  .playhead{position:absolute;top:0;bottom:0;width:1px;background:#7fd0ff;
+            box-shadow:0 0 6px #7fd0ff;pointer-events:none;opacity:0;left:0}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+           background:rgba(20,20,20,.82);padding:20px;text-align:center}
+  .overlay.hidden{display:none}
+  .overlay .card{max-width:440px}
+  .overlay h2{font-size:13px;margin:0 0 6px;color:var(--clash)}
+  .overlay p{margin:0;color:var(--ink-dim);font-size:11.5px;line-height:1.5}
+  .overlay .fix{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)}
+
+  .report{flex:none;padding:6px 10px;background:var(--panel-2);border-top:1px solid #1e1e1e;
+      display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:10px}
+  .stat{display:flex;align-items:baseline;gap:4px}
+  .stat .n{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums}
+  .stat .k{color:var(--ink-faint)}
+  .stat.moved .n{color:var(--moved)} .stat.kept .n{color:var(--kept)}
+  .stat.clash .n{color:var(--clash)} .stat.outside .n{color:var(--outside)}
+  .edits{color:var(--ink-dim);margin-left:auto}
+
+  footer{display:flex;align-items:center;gap:7px;padding:8px 10px;background:var(--panel);
+         border-top:1px solid #1e1e1e;flex:none}
+  .seg-btns{display:flex;border:1px solid #151515;border-radius:3px;overflow:hidden}
+  .seg-btns button{background:var(--sunk);color:var(--ink);border:none;padding:5px 10px;
+      font:inherit;font-size:11px;cursor:pointer;border-right:1px solid #151515}
+  .seg-btns button:last-child{border-right:none}
+  .seg-btns button[aria-pressed="true"]{background:#4a4a4a;color:#fff}
+  .seg-btns button:disabled{color:#555;cursor:default}
+  .audlabel{color:var(--ink-faint);font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+  footer .spacer{flex:1}
+  .btn{background:var(--sunk);color:var(--ink);border:1px solid #151515;border-radius:3px;
+       padding:5px 13px;font:inherit;font-size:11.5px;cursor:pointer}
+  .btn:hover{background:#2c2c2c}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:#d98a3c;font-weight:650}
+  .btn.primary:disabled{background:#4a4238;color:#8a8177;border-color:#3a352e;cursor:default}
+  .note{font-family:var(--mono);font-size:10px;color:var(--kept)}
+  .legend{display:flex;gap:12px;padding:5px 10px;background:var(--sunk);border-top:1px solid #1e1e1e;
+          font-size:9.5px;color:var(--ink-faint);align-items:center;flex-wrap:wrap;flex:none}
+  .legend i{display:inline-block;width:14px;height:7px;border-radius:2px;margin-right:4px;
+            vertical-align:middle}
+  button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #7fb2e5;outline-offset:1px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tonality Workshop</h1>
+  <span class="clip" id="clipInfo">loading…</span>
+  <span class="spacer"></span>
+  <span class="keyread">
+    <span class="lbl">detected key</span><span class="val" id="keyName">—</span>
+    <span id="keyMargin" style="color:var(--ink-faint)"></span>
+  </span>
+</header>
+
+<div class="body">
+  <div class="rail">
+    <div class="sect">Transformation</div>
+    <div id="ops"></div>
+    <div class="params" id="params"></div>
+
+    <div class="sect" style="margin-top:11px">Display</div>
+    <label class="check">
+      <input type="checkbox" id="markOutside" />
+      <span>Mark out-of-scale notes</span>
+    </label>
+    <div class="field" id="refField" style="display:none">
+      <label for="refSel">Reference scale</label>
+      <select id="refSel">
+        <option value="target">Target scale (below)</option>
+        <option value="detected">Detected key</option>
+      </select>
+      <p class="hint" id="refHint"></p>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="chordstrip" id="chords"></div>
+    <div class="rollwrap">
+      <canvas id="roll" width="1600" height="620"></canvas>
+      <div class="playhead" id="playhead"></div>
+      <div class="overlay hidden" id="overlay">
+        <div class="card">
+          <h2 id="ovTitle"></h2>
+          <p id="ovBody"></p>
+          <p class="fix" id="ovFix"></p>
+        </div>
+      </div>
+    </div>
+    <div class="report" id="report"></div>
+    <div class="legend">
+      <span><i style="background:#4a4a4a"></i>unchanged</span>
+      <span><i style="background:#e0a94e"></i>moved</span>
+      <span><i style="border:1px solid #6a6a6a"></i>original position</span>
+      <span><i style="background:#9b6bd4"></i>out of reference scale</span>
+      <span><i style="background:#2f2f38"></i>in-scale lane</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span class="audlabel">Audition</span>
+  <div class="seg-btns">
+    <button id="playBefore" aria-pressed="false">▶ Before</button>
+    <button id="playAfter" aria-pressed="false" disabled>▶ After</button>
+    <button id="stop">■</button>
+  </div>
+  <span class="note" id="renderNote"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="cancel">Cancel</button>
+  <button class="btn primary" id="render" disabled>Render to clip</button>
+</footer>
+
+<script>
+/* ---------------------------------------------------------------------------
+   RULE 2 (ROADMAP Q-004): the bridge base URL is INJECTED, never inferred from
+   location.origin — a data:-delivered copy of this page has an opaque origin.
+   --------------------------------------------------------------------------- */
+const BASE = "__TONALITY_BASE__";
+
+const PC = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const $ = id => document.getElementById(id);
+
+/* ---------------------------------------------------------------------------
+   RULE 1: the ONE seam that knows where the clip came from. Served mode fetches
+   a parked session; a data: build would read an inlined constant here instead.
+   Nothing else in this file knows the difference.
+   --------------------------------------------------------------------------- */
+async function loadInput() {
+  if (typeof window.__TONALITY_INPUT__ !== "undefined") return window.__TONALITY_INPUT__;
+  const sid = new URLSearchParams(location.search).get("s") || "demo";
+  const r = await fetch(`${BASE}/session/${encodeURIComponent(sid)}`);
+  if (!r.ok) throw new Error(`could not load clip (${r.status})`);
+  return r.json();
+}
+
+const api = async (path, body) => {
+  const r = await fetch(`${BASE}${path}`, body ? {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body),
+  } : undefined);
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (_) {}
+  if (!r.ok) {
+    const err = new Error((data && data.error) || text || `HTTP ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+};
+
+const OPS = [
+  { id:"none",     name:"None — analysis only", sub:"observe, change nothing" },
+  { id:"conform",  name:"Clean up / constrain", sub:"conform · may merge notes" },
+  { id:"remap",    name:"Translate to scale",   sub:"remap by degree · keeps walks" },
+  { id:"transpose",name:"Transpose",            sub:"semitone shift" },
+];
+
+const S = {
+  input:null, analysis:null, scales:[], op:"none",
+  root:0, scale:"Ionian", sourceRoot:0, sourceScale:"Ionian", tieBreak:"previous",
+  shift:0, after:null, refDegrees:null, busy:false,
+};
+
+/* ------------------------------ rail ------------------------------------- */
+function buildOps() {
+  const el = $("ops"); el.innerHTML = "";
+  for (const o of OPS) {
+    const b = document.createElement("button");
+    b.className = "op"; b.type = "button"; b.dataset.id = o.id;
+    b.setAttribute("aria-pressed", String(o.id === S.op));
+    const n = document.createElement("span"); n.className = "name"; n.textContent = o.name;
+    const s = document.createElement("span"); s.className = "sub"; s.textContent = o.sub;
+    b.append(n, s);
+    b.addEventListener("click", () => { S.op = o.id; syncRail(); recompute(); });
+    el.appendChild(b);
+  }
+}
+
+function scaleOptions(selected) {
+  return S.scales.map(s =>
+    `<option value="${s.name}"${s.name === selected ? " selected" : ""}>${s.name}</option>`).join("");
+}
+const rootOptions = sel => PC.map((n,i) =>
+  `<option value="${i}"${i === sel ? " selected" : ""}>${n}</option>`).join("");
+
+function syncRail() {
+  for (const b of $("ops").children) b.setAttribute("aria-pressed", String(b.dataset.id === S.op));
+  const p = $("params");
+
+  if (S.op === "none") {
+    p.innerHTML = `<p class="hint">Nothing will be written. Switch on
+      <em>Mark out-of-scale notes</em> to see which notes sit outside a scale.</p>`;
+  } else if (S.op === "transpose") {
+    p.innerHTML = `<div class="field"><label for="semi">Semitones (negative = down)</label>
+      <input id="semi" type="number" placeholder="0" step="1" /></div>
+      <p class="hint">Pure arithmetic — the only transform that needs no engine call.</p>`;
+    $("semi").value = S.shift || "";
+    $("semi").addEventListener("input", e => {
+      const v = parseInt(e.target.value, 10);
+      S.shift = Number.isFinite(v) ? v : 0; recompute();
+    });
+  } else {
+    const isRemap = S.op === "remap";
+    p.innerHTML =
+      (isRemap ? `<div class="field"><label for="srcRoot">Source root</label>
+          <select id="srcRoot">${rootOptions(S.sourceRoot)}</select></div>
+        <div class="field"><label for="srcScale">Source scale</label>
+          <select id="srcScale">${scaleOptions(S.sourceScale)}</select></div>` : ``) +
+      `<div class="field"><label for="tRoot">${isRemap ? "Target root" : "Root"}</label>
+        <select id="tRoot">${rootOptions(S.root)}</select></div>
+       <div class="field"><label for="tScale">${isRemap ? "Target scale" : "Scale"}</label>
+        <select id="tScale">${scaleOptions(S.scale)}</select></div>` +
+      (isRemap ? `<p class="hint">Degree → degree. A scale walk survives, but source and
+          target must have the <strong>same number of notes</strong>.</p>`
+               : `<div class="field"><label for="tie">Ties resolve</label>
+          <select id="tie">
+            <option value="previous">Toward the previous note</option>
+            <option value="down">Always down</option>
+            <option value="up">Always up</option></select></div>
+        <p class="hint">Proximity snap. In a major key every out-of-key note sits exactly
+          between two key notes, so the tie setting decides all of them.</p>`);
+
+    const bind = (id, key, num) => {
+      const el = $(id); if (!el) return;
+      el.addEventListener("change", e => {
+        S[key] = num ? parseInt(e.target.value, 10) : e.target.value; recompute();
+      });
+    };
+    bind("tRoot","root",true); bind("tScale","scale");
+    bind("srcRoot","sourceRoot",true); bind("srcScale","sourceScale");
+    if ($("tie")) { $("tie").value = S.tieBreak; bind("tie","tieBreak"); }
+  }
+
+  $("refField").style.display = $("markOutside").checked ? "" : "none";
+  const detected = S.analysis && S.analysis.key ? S.analysis.key.name : "—";
+  $("refHint").textContent = $("refSel").value === "detected"
+    ? `Using the engine's detected key (${detected}).`
+    : (S.op === "none" || S.op === "transpose"
+        ? "No target scale is selected — pick a transformation, or switch to the detected key."
+        : `Using ${PC[S.root]} ${S.scale}.`);
+}
+
+/* --------------------------- pairing (L0006) ------------------------------ */
+/* The engine returns events in ITS canonical (onset, midi) order, not the order
+   we sent. Pair via report.edits on (onset, from_midi) — never by position. */
+function pairAfter(before, edits) {
+  const pending = (edits || []).map(e => ({...e, used:false}));
+  return before.map((n, i) => {
+    const hit = pending.find(e => !e.used && e.onset === n.startTime && e.from_midi === n.pitch);
+    if (hit) { hit.used = true; return {...n, pitch: hit.to_midi, _i:i}; }
+    return {...n, _i:i};
+  });
+}
+
+/* ----------------------------- compute ----------------------------------- */
+let seq = 0;
+async function recompute() {
+  const mine = ++seq;
+  hideOverlay();
+  const canRender = S.op !== "none" && !(S.op === "transpose" && !S.shift);
+
+  try {
+    if (S.op === "none") {
+      S.after = null;
+    } else if (S.op === "transpose") {
+      const notes = S.input.notes
+        .map((n,i) => ({...n, pitch:n.pitch + S.shift, _i:i}))
+        .filter(n => n.pitch >= 0 && n.pitch <= 127);
+      S.after = { notes, report:{ edits:[], collisions:[], ties_resolved:0,
+                                  notes_total:S.input.notes.length, degrees:null } };
+    } else {
+      const body = S.op === "conform"
+        ? { op:"conform_to_scale", scale:S.scale, rootPc:S.root, tieBreak:S.tieBreak }
+        : { op:"remap_by_degree", sourceScale:S.sourceScale, sourceRoot:S.sourceRoot,
+            targetScale:S.scale, targetRoot:S.root };
+      const out = await api("/transform", { ...body, notes:S.input.notes, bpm:S.input.bpm });
+      if (mine !== seq) return;
+      S.after = { notes: pairAfter(S.input.notes, out.report.edits), report: out.report };
+    }
+  } catch (err) {
+    if (mine !== seq) return;
+    S.after = null;
+    // The engine's refusal is a first-class UI state, not an error dialog.
+    const cardinality = /cardinality/i.test(err.message);
+    showOverlay(
+      cardinality ? "These scales have different numbers of notes" : "The engine refused",
+      err.message,
+      cardinality ? "Use “Clean up / constrain” instead — it will fit the notes, but it may merge neighbours."
+                  : "");
+  }
+
+  await refreshReference();
+  if (mine !== seq) return;
+  $("render").disabled = !canRender || !S.after;
+  $("playAfter").disabled = !S.after;
+  draw(); drawReport();
+}
+
+/* Reference degrees for out-of-scale marking. Always ENGINE-supplied: either the
+   catalog entry for the chosen scale, or the degrees the engine reports for the
+   detected key. We never derive scale content locally. */
+async function refreshReference() {
+  if (!$("markOutside").checked) { S.refDegrees = null; return; }
+  const useDetected = $("refSel").value === "detected";
+  if (useDetected) {
+    const name = S.analysis && S.analysis.key && S.analysis.key.name;
+    if (!name) { S.refDegrees = null; return; }
+    const [tonic, mode] = name.split(" ");
+    const root = PC.indexOf(tonic.replace("b","#")) >= 0 ? PC.indexOf(tonic) : 0;
+    try {
+      const out = await api("/transform", { op:"fit_to_key", tonicPc:root,
+        mode:(mode || "major").toLowerCase().startsWith("min") ? "minor" : "major",
+        notes:S.input.notes });
+      S.refDegrees = out.report.degrees;
+    } catch (_) { S.refDegrees = null; }
+  } else {
+    const entry = S.scales.find(s => s.name === S.scale);
+    S.refDegrees = entry ? entry.degrees.map(d => (S.root + d) % 12) : null;
+  }
+}
+
+/* ------------------------------ drawing ---------------------------------- */
+const cv = $("roll"), g = cv.getContext("2d");
+let LO = 48, HI = 84, BEATS = 8;
+
+function computeSpan() {
+  const all = [...S.input.notes, ...(S.after ? S.after.notes : [])];
+  let lo = 127, hi = 0, end = 0;
+  for (const n of all) {
+    lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch);
+    end = Math.max(end, n.startTime + n.duration);
+  }
+  LO = lo - 1; HI = hi + 1; BEATS = Math.max(1, Math.ceil(end));
+}
+
+function draw() {
+  computeSpan();
+  const W = cv.width, H = cv.height, lanes = HI - LO + 1, lh = H / lanes;
+  const bx = b => (b / BEATS) * W, ly = p => H - ((p - LO + 1) * lh);
+  const inRef = p => S.refDegrees ? S.refDegrees.includes(((p % 12) + 12) % 12) : false;
+  const target = S.after && S.after.report ? S.after.report.degrees : null;
+
+  g.clearRect(0,0,W,H);
+  for (let p = LO; p <= HI; p++) {
+    const shaded = target ? target.includes(((p % 12) + 12) % 12) : false;
+    g.fillStyle = shaded ? "#2f2f38" : "#1b1b1b";
+    g.fillRect(0, ly(p), W, lh - 1);
+    if (p % 12 === 0) { g.strokeStyle = "#2b2b2b"; g.beginPath();
+      g.moveTo(0, ly(p)+lh); g.lineTo(W, ly(p)+lh); g.stroke(); }
+  }
+  for (let b = 0; b <= BEATS; b++) {
+    g.strokeStyle = b % 4 === 0 ? "#3a3a3a" : "#262626";
+    g.beginPath(); g.moveTo(bx(b),0); g.lineTo(bx(b),H); g.stroke();
+  }
+
+  const shown = S.after ? S.after.notes : S.input.notes.map((n,i)=>({...n,_i:i}));
+  const rounded = typeof g.roundRect === "function";
+
+  if (S.after) {
+    for (const n of shown) {
+      const b0 = S.input.notes[n._i];
+      if (!b0 || b0.pitch === n.pitch) continue;
+      g.strokeStyle = "#6a6a6a"; g.lineWidth = 1;
+      g.strokeRect(bx(b0.startTime)+1, ly(b0.pitch)+2, Math.max(3,bx(b0.duration)-2), lh-4);
+      g.strokeStyle = "rgba(224,169,78,.45)";
+      g.beginPath(); g.moveTo(bx(b0.startTime)+4, ly(b0.pitch)+lh/2);
+      g.lineTo(bx(n.startTime)+4, ly(n.pitch)+lh/2); g.stroke();
+    }
+  }
+
+  for (const n of shown) {
+    const b0 = S.input.notes[n._i];
+    const moved = S.after && b0 && b0.pitch !== n.pitch;
+    const outside = $("markOutside").checked && S.refDegrees && !inRef(n.pitch);
+    g.fillStyle = moved ? "#e0a94e" : (outside ? "#9b6bd4" : "#4a4a4a");
+    const x = bx(n.startTime)+1, y = ly(n.pitch)+2,
+          w = Math.max(3, bx(n.duration)-2), h = lh-4;
+    if (rounded) { g.beginPath(); g.roundRect(x,y,w,h,2); g.fill(); }
+    else g.fillRect(x,y,w,h);
+    if (moved || outside) {
+      g.strokeStyle = moved ? "#f0c078" : "#c4a0e8"; g.lineWidth = 1;
+      if (rounded) g.stroke(); else g.strokeRect(x,y,w,h);
+    }
+  }
+}
+
+function drawChords() {
+  const el = $("chords"); el.innerHTML = "";
+  const ch = (S.analysis && S.analysis.chords) || [];
+  ch.forEach((c,i) => {
+    const start = c.onset ?? 0;
+    const end = i+1 < ch.length ? (ch[i+1].onset ?? BEATS) : BEATS;
+    const trivial = c.pcs && c.pcs.length === 1;
+    const d = document.createElement("div");
+    d.className = "seg " + (trivial ? "trivial" : (c.role || ""));
+    d.style.left = (start/BEATS*100)+"%";
+    d.style.width = ((end-start)/BEATS*100)+"%";
+    d.textContent = trivial ? "" : c.name;
+    d.title = `${c.name}${c.role ? " · "+c.role : ""} @ beat ${start}`;
+    el.appendChild(d);
+  });
+}
+
+function drawReport() {
+  const el = $("report");
+  const notes = S.after ? S.after.notes : S.input.notes.map((n,i)=>({...n,_i:i}));
+  const moved = S.after ? notes.filter(n => {
+    const b = S.input.notes[n._i]; return b && b.pitch !== n.pitch; }).length : 0;
+  const r = (S.after && S.after.report) || {};
+  const outside = ($("markOutside").checked && S.refDegrees)
+    ? notes.filter(n => !S.refDegrees.includes(((n.pitch%12)+12)%12)).length : null;
+  const dropped = S.input.notes.length - notes.length;
+  // Only edits that actually MOVED something. remap reports an edit for every
+  // chromatic note — including ones whose pitch is unchanged (it is recording the
+  // degree attachment, not a move) — and "G#→G#" in the summary reads as a bug.
+  const realEdits = (r.edits || []).filter(e => e.from_midi !== e.to_midi);
+  const edits = realEdits.slice(0,4)
+    .map(e => `${PC[e.from_midi%12]}→${PC[e.to_midi%12]}`).join("  ");
+
+  const bits = [];
+  if (S.after) {
+    bits.push(`<span class="stat moved"><span class="n">${moved}</span><span class="k">moved</span></span>`);
+    bits.push(`<span class="stat kept"><span class="n">${notes.length-moved}</span><span class="k">unchanged</span></span>`);
+    if (r.ties_resolved) bits.push(`<span class="stat"><span class="n">${r.ties_resolved}</span><span class="k">ties</span></span>`);
+    if ((r.collisions||[]).length) bits.push(`<span class="stat clash"><span class="n">${r.collisions.length}</span><span class="k">collisions</span></span>`);
+    if (dropped > 0) bits.push(`<span class="stat clash"><span class="n">${dropped}</span><span class="k">out of MIDI range</span></span>`);
+  } else {
+    bits.push(`<span class="stat"><span class="n">${S.input.notes.length}</span><span class="k">notes</span></span>`);
+  }
+  if (outside !== null) bits.push(`<span class="stat outside"><span class="n">${outside}</span><span class="k">out of scale</span></span>`);
+  if (edits) bits.push(`<span class="edits">${edits}${realEdits.length>4?"  …":""}</span>`);
+  el.innerHTML = bits.join("");
+}
+
+function showOverlay(title, body, fix) {
+  $("ovTitle").textContent = title; $("ovBody").textContent = body;
+  $("ovFix").textContent = fix || ""; $("overlay").classList.remove("hidden");
+}
+const hideOverlay = () => $("overlay").classList.add("hidden");
+
+/* ------------------------------- audio ----------------------------------- */
+let ac = null, playing = null, raf = 0;
+function stopAll() {
+  if (ac) { try { ac.close(); } catch(_){} ac = null; }
+  cancelAnimationFrame(raf); playing = null;
+  $("playhead").style.opacity = 0;
+  $("playBefore").setAttribute("aria-pressed","false");
+  $("playAfter").setAttribute("aria-pressed","false");
+}
+function play(which) {
+  stopAll();
+  const notes = which === "before" ? S.input.notes : (S.after && S.after.notes);
+  if (!notes || !notes.length) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  const spb = 60 / (S.input.bpm || 120), t0 = ac.currentTime + 0.08;
+  const bus = ac.createGain(); bus.gain.value = 0.5; bus.connect(ac.destination);
+  for (const n of notes) {
+    const o = ac.createOscillator(), gn = ac.createGain();
+    o.type = "triangle";
+    o.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+    const s = t0 + n.startTime * spb, d = Math.max(0.08, n.duration * spb);
+    const peak = 0.09 + ((n.velocity ?? 90)/127) * 0.15;
+    gn.gain.setValueAtTime(0.0001, s);
+    gn.gain.exponentialRampToValueAtTime(peak, s + 0.012);
+    gn.gain.exponentialRampToValueAtTime(0.0001, s + d);
+    o.connect(gn); gn.connect(bus); o.start(s); o.stop(s + d + 0.03);
+  }
+  playing = which;
+  $(which === "before" ? "playBefore" : "playAfter").setAttribute("aria-pressed","true");
+  const ph = $("playhead"); ph.style.opacity = 1;
+  const dur = BEATS * spb;
+  (function tick(){
+    if (!ac) return;
+    const el = ac.currentTime - t0;
+    if (el > dur) { stopAll(); return; }
+    ph.style.left = (Math.max(0,el)/dur*100)+"%";
+    raf = requestAnimationFrame(tick);
+  })();
+}
+
+/* ------------------------------ handoff back ------------------------------ */
+const host = (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live)
+          || (window.chrome && window.chrome.webview) || null;
+function sendBack(result) {
+  if (!host) return false;
+  const msg = { method:"close_and_send", params:[JSON.stringify(result)] };
+  host.postMessage(msg);
+  return true;
+}
+
+/* -------------------------------- init ----------------------------------- */
+(async function init(){
+  try {
+    S.input = await loadInput();
+  } catch (err) {
+    showOverlay("Can't reach the Tonality bridge", String(err.message || err),
+      "Start it:  <Tonality>/.venv/bin/python3 <Tonality-Live>/bridge/server.py");
+    return;
+  }
+  $("clipInfo").textContent =
+    `${S.input.notes.length} notes · ${Math.ceil(Math.max(...S.input.notes.map(n=>n.startTime+n.duration)))} beats · ${S.input.bpm||120} BPM`;
+  if (S.input.demo) { $("clipInfo").classList.add("demo");
+    $("clipInfo").textContent += "  · DEMO CLIP"; }
+
+  buildOps();
+  try { S.scales = (await api("/scales")).scales; } catch(_) { S.scales = []; }
+  try {
+    S.analysis = (await api("/analyze", { notes:S.input.notes, bpm:S.input.bpm })).summary;
+    if (S.analysis.key) {
+      $("keyName").textContent = S.analysis.key.name;
+      if (S.analysis.key.margin != null)
+        $("keyMargin").textContent = "margin " + S.analysis.key.margin.toFixed(2);
+      // Preselect the target from the detected key. Parsing the engine's own
+      // label is display-layer; the DEGREES always come from the engine.
+      const [tonic, mode] = S.analysis.key.name.split(" ");
+      if (PC.indexOf(tonic) >= 0) S.root = S.sourceRoot = PC.indexOf(tonic);
+      const minor = (mode||"").toLowerCase().startsWith("min");
+      S.scale = S.sourceScale = minor ? "Natural Minor" : "Ionian";
+    }
+  } catch (err) {
+    $("keyName").textContent = "unavailable";
+  }
+
+  $("markOutside").addEventListener("change", () => { syncRail(); recompute(); });
+  $("refSel").addEventListener("change", () => { syncRail(); recompute(); });
+  $("playBefore").addEventListener("click", () => playing==="before" ? stopAll() : play("before"));
+  $("playAfter").addEventListener("click", () => playing==="after" ? stopAll() : play("after"));
+  $("stop").addEventListener("click", stopAll);
+  $("cancel").addEventListener("click", () => { stopAll(); sendBack({ notes:null }); });
+  $("render").addEventListener("click", () => {
+    if (!S.after) return;
+    stopAll();
+    const payload = { notes: S.after.notes.map(({_i, ...n}) => n),
+                      report: S.after.report };
+    if (!sendBack(payload)) {
+      $("renderNote").textContent =
+        `→ would write ${payload.notes.length} notes as one undo step`;
+      setTimeout(() => { $("renderNote").textContent = ""; }, 2600);
+    }
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { stopAll(); sendBack({notes:null}); }});
+
+  syncRail(); drawChords(); await recompute();
+})();
+</script>
+</body>
+</html>
