@@ -96,6 +96,57 @@ theory in this repo** — theory-driven alters go through the bridge's
   from the engine catalog rather than a hardcoded TypeScript copy that would go
   stale (37 scales).
 
+### Q-005 — Transpose dialog turned "1" into "10" (fixed)
+- **Status:** done 2026-08-10 (trace: traces/2026-08-10-transpose-input-fix.md)
+- **Symptom (user-reported):** "transposition of 1 moves way further than a
+  semitone." Reproduced: the semitones field shipped pre-filled with `value="0"`,
+  so a caret landing *before* the zero — which is what clicking into the field
+  does — turned a typed `1` into `10`. Ten semitones, with nothing on screen
+  looking wrong.
+- **Fix:** the field now ships empty with `placeholder="0"`, so there is no digit
+  to prepend to. `extension/ui/transpose.html`.
+- **Not the cause (ruled out with evidence):** `transpose()` itself is correct —
+  measured in Live, inputs 1 and 2 moved every note exactly 1 and 2 semitones;
+  the Enter path applies once; no stale queued dialog reply.
+- **Known gap:** dialog input handling has no automated coverage (inline JS in
+  HTML, not reachable from node:test). Verified by DOM check + in-Live measurement.
+
+### Q-004 — Collapse the extension into one "workshop" GUI
+- **Status:** open — **BLOCKED on a human ruling** (see open questions). Do not
+  start: the acceptance criteria for "audition" cannot be written until the
+  audition mechanism is chosen, and the SDK constrains that choice hard.
+- **Intent (human, 2026-08-10):** replace the four separate context-menu commands
+  with a *single* menu command that opens a workshop GUI which offers and
+  auditions transformations, with a render button to commit them.
+- **SDK reconnaissance (grounded — `@ableton-extensions/sdk` 1.0.0-beta.0
+  `dist/index.d.mts`):**
+  - `Ui` exposes exactly three methods: `registerContextMenuAction`,
+    `showModalDialog(url, w, h)`, `withinProgressDialog`. **There is no
+    non-modal/persistent panel API** — a modal dialog is the only container, and
+    it blocks Live's UI while open.
+  - **No transport or preview API anywhere.** `Song` has tempo/scenes/tracks/grid
+    /rootNote/scaleName/scaleMode but no play/stop; `ClipSlot` has no `fire()`.
+    The extension therefore *cannot* play anything itself.
+  - `Resources.renderPreFxAudio(track: AudioTrack, start, end)` renders audio —
+    but it takes an **AudioTrack**, so it cannot render a MIDI clip's instrument
+    output. Not an audition path for MIDI without a resample step.
+  - Useful find: `song.rootNote` / `scaleName` / `scaleMode` expose Live's own
+    key/scale, so the workshop can default its target key instead of asking.
+- **Feasible without new SDK surface:** one command + one modal; several
+  transformations with parameters in one view; before/after note preview drawn in
+  HTML from the bridge's returned notes/edits/collisions; chained ops applied as
+  one undo step; key/scale defaulted from Live's setting.
+- **Open questions (blocking, human):**
+  1. **What does "audition" mean here?** (a) synthesize a sketch in the dialog via
+     Web Audio — works inside the modal, but not the user's instrument; (b) write
+     candidates to a spare clip slot and audition with Live's real playback —
+     right sound, but breaks the single-modal flow; (c) visual + analytic only
+     (before/after roll, resulting key/chords, what moved) — no sound.
+  2. Do the four existing command IDs get **removed** (public-interface change,
+     §Domain protected) or kept alongside the workshop?
+  3. Does the workshop transform the clip in place, or always into a copy?
+- **Out of scope until ruled:** any implementation.
+
 ## Decision log
 
 <!-- One line per ratified decision, newest first, linking to traces/. -->

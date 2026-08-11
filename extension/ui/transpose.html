@@ -47,7 +47,11 @@
   <body>
     <h1>Transpose clip</h1>
     <label for="semitones">Semitones (negative = down)</label>
-    <input id="semitones" type="number" value="0" step="1" autofocus />
+    <!-- Deliberately EMPTY with a placeholder, not value="0". A pre-filled "0"
+         silently turns a typed "1" into "10" whenever the caret lands before it
+         (which is what clicking into the field does) — a semitone becomes a
+         minor 7th with nothing on screen looking wrong. Reported 2026-08-10. -->
+    <input id="semitones" type="number" placeholder="0" step="1" autofocus />
     <div class="row">
       <button id="cancel">Cancel</button>
       <button id="ok">Apply</button>
