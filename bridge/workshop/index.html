@@ -102,6 +102,11 @@
           font-size:9.5px;color:var(--ink-faint);align-items:center;flex-wrap:wrap;flex:none}
   .legend i{display:inline-block;width:14px;height:7px;border-radius:2px;margin-right:4px;
             vertical-align:middle}
+  option.bad{color:var(--clash)}
+  select.bad{border-color:var(--clash);color:var(--clash)}
+  .overlay .act{margin-top:12px}
+  .overlay .act button{background:var(--accent);color:var(--accent-ink);border:1px solid #d98a3c;
+      border-radius:3px;padding:6px 14px;font:inherit;font-size:11.5px;font-weight:650;cursor:pointer}
   button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #7fb2e5;outline-offset:1px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -124,15 +129,28 @@
     <div id="ops"></div>
     <div class="params" id="params"></div>
 
+    <!-- Persistent and shared by every mode: the scale you are working against.
+         Stays put so it never moves under you when the transformation changes. -->
+    <div class="sect" style="margin-top:11px">Scale</div>
+    <div class="field">
+      <label for="tRoot">Root</label>
+      <select id="tRoot"></select>
+    </div>
+    <div class="field">
+      <label for="tScale">Scale</label>
+      <select id="tScale"></select>
+      <p class="hint" id="scaleHint"></p>
+    </div>
+
     <div class="sect" style="margin-top:11px">Display</div>
     <label class="check">
       <input type="checkbox" id="markOutside" />
-      <span>Mark out-of-scale notes</span>
+      <span>Mark notes outside a scale</span>
     </label>
     <div class="field" id="refField" style="display:none">
       <label for="refSel">Reference scale</label>
       <select id="refSel">
-        <option value="target">Target scale (below)</option>
+        <option value="target">Target scale</option>
         <option value="detected">Detected key</option>
       </select>
       <p class="hint" id="refHint"></p>
@@ -149,6 +167,9 @@
           <h2 id="ovTitle"></h2>
           <p id="ovBody"></p>
           <p class="fix" id="ovFix"></p>
+          <div class="act" id="ovAct" style="display:none">
+            <button type="button" id="ovConstrain">Constrain to this scale instead</button>
+          </div>
         </div>
       </div>
     </div>
@@ -224,7 +245,7 @@ const OPS = [
 const S = {
   input:null, analysis:null, scales:[], op:"none",
   root:0, scale:"Ionian", sourceRoot:0, sourceScale:"Ionian", tieBreak:"previous",
-  shift:0, after:null, refDegrees:null, busy:false,
+  shift:0, after:null, refDegrees:null, busy:false, sourceFromDetected:true,
 };
 
 /* ------------------------------ rail ------------------------------------- */
@@ -242,12 +263,40 @@ function buildOps() {
   }
 }
 
-function scaleOptions(selected) {
-  return S.scales.map(s =>
-    `<option value="${s.name}"${s.name === selected ? " selected" : ""}>${s.name}</option>`).join("");
-}
 const rootOptions = sel => PC.map((n,i) =>
   `<option value="${i}"${i === sel ? " selected" : ""}>${n}</option>`).join("");
+
+/* The shared Root/Scale selects are built once and restyled per mode, rather
+   than re-rendered — rebuilding innerHTML on every change threw away focus and
+   the scroll position mid-list. */
+function fillScaleSelect() {
+  const sel = $("tScale");
+  sel.innerHTML = S.scales.map(s =>
+    `<option value="${s.name}" data-n="${s.degrees.length}">${s.name} (${s.degrees.length})</option>`
+  ).join("");
+  sel.value = S.scale;
+  $("tRoot").innerHTML = rootOptions(S.root);
+}
+
+/* In translate mode only equal-cardinality targets can work, so mark the rest
+   red *before* the user picks one and hits a refusal. */
+function markScaleCardinality() {
+  const sel = $("tScale");
+  const need = S.op === "remap" ? sourceDegreeCount() : null;
+  for (const opt of sel.options) {
+    const n = Number(opt.dataset.n);
+    const bad = need !== null && n !== need;
+    opt.classList.toggle("bad", bad);
+    opt.textContent = `${opt.value} (${n})${bad ? " ✕" : ""}`;
+  }
+  sel.classList.toggle("bad", need !== null && Number(sel.selectedOptions[0]?.dataset.n) !== need);
+}
+
+const degreeCount = name => {
+  const s = S.scales.find(x => x.name === name);
+  return s ? s.degrees.length : null;
+};
+const sourceDegreeCount = () => degreeCount(S.sourceScale);
 
 function syncRail() {
   for (const b of $("ops").children) b.setAttribute("aria-pressed", String(b.dataset.id === S.op));
@@ -255,7 +304,7 @@ function syncRail() {
 
   if (S.op === "none") {
     p.innerHTML = `<p class="hint">Nothing will be written. Switch on
-      <em>Mark out-of-scale notes</em> to see which notes sit outside a scale.</p>`;
+      <em>Mark notes outside a scale</em> to see what sits outside the scale below.</p>`;
   } else if (S.op === "transpose") {
     p.innerHTML = `<div class="field"><label for="semi">Semitones (negative = down)</label>
       <input id="semi" type="number" placeholder="0" step="1" /></div>
@@ -265,45 +314,66 @@ function syncRail() {
       const v = parseInt(e.target.value, 10);
       S.shift = Number.isFinite(v) ? v : 0; recompute();
     });
+  } else if (S.op === "remap") {
+    const det = S.analysis && S.analysis.key ? S.analysis.key.name : null;
+    p.innerHTML = `
+      <label class="check"><input type="checkbox" id="srcDetected" ${S.sourceFromDetected ? "checked" : ""} />
+        <span>Use detected key as source</span></label>
+      <div class="field"><label for="srcRoot">Source root</label>
+        <select id="srcRoot" ${S.sourceFromDetected ? "disabled" : ""}>${rootOptions(S.sourceRoot)}</select></div>
+      <div class="field"><label for="srcScale">Source scale</label>
+        <select id="srcScale" ${S.sourceFromDetected ? "disabled" : ""}>${
+          S.scales.map(s => `<option value="${s.name}"${s.name===S.sourceScale?" selected":""}>${s.name} (${s.degrees.length})</option>`).join("")
+        }</select></div>
+      <p class="hint">${S.sourceFromDetected && det ? `Locked to the detected key (${det}).<br>` : ""}
+        Degree → degree, so a scale walk survives. Source and target must have the
+        <strong>same number of notes</strong>; targets that don't are marked ✕.</p>`;
+    $("srcDetected").addEventListener("change", e => {
+      S.sourceFromDetected = e.target.checked;
+      if (S.sourceFromDetected) applyDetectedSource();
+      syncRail(); recompute();
+    });
+    bindSel("srcRoot","sourceRoot",true); bindSel("srcScale","sourceScale");
   } else {
-    const isRemap = S.op === "remap";
-    p.innerHTML =
-      (isRemap ? `<div class="field"><label for="srcRoot">Source root</label>
-          <select id="srcRoot">${rootOptions(S.sourceRoot)}</select></div>
-        <div class="field"><label for="srcScale">Source scale</label>
-          <select id="srcScale">${scaleOptions(S.sourceScale)}</select></div>` : ``) +
-      `<div class="field"><label for="tRoot">${isRemap ? "Target root" : "Root"}</label>
-        <select id="tRoot">${rootOptions(S.root)}</select></div>
-       <div class="field"><label for="tScale">${isRemap ? "Target scale" : "Scale"}</label>
-        <select id="tScale">${scaleOptions(S.scale)}</select></div>` +
-      (isRemap ? `<p class="hint">Degree → degree. A scale walk survives, but source and
-          target must have the <strong>same number of notes</strong>.</p>`
-               : `<div class="field"><label for="tie">Ties resolve</label>
-          <select id="tie">
-            <option value="previous">Toward the previous note</option>
-            <option value="down">Always down</option>
-            <option value="up">Always up</option></select></div>
-        <p class="hint">Proximity snap. In a major key every out-of-key note sits exactly
-          between two key notes, so the tie setting decides all of them.</p>`);
-
-    const bind = (id, key, num) => {
-      const el = $(id); if (!el) return;
-      el.addEventListener("change", e => {
-        S[key] = num ? parseInt(e.target.value, 10) : e.target.value; recompute();
-      });
-    };
-    bind("tRoot","root",true); bind("tScale","scale");
-    bind("srcRoot","sourceRoot",true); bind("srcScale","sourceScale");
-    if ($("tie")) { $("tie").value = S.tieBreak; bind("tie","tieBreak"); }
+    p.innerHTML = `<div class="field"><label for="tie">Ties resolve</label>
+        <select id="tie">
+          <option value="previous">Toward the previous note</option>
+          <option value="down">Always down</option>
+          <option value="up">Always up</option></select></div>
+      <p class="hint">Proximity snap — it may merge neighbouring notes. In a major key every
+        out-of-key note sits exactly between two key notes, so this setting decides all of them.</p>`;
+    $("tie").value = S.tieBreak; bindSel("tie","tieBreak");
   }
+
+  markScaleCardinality();
+  const need = S.op === "remap" ? sourceDegreeCount() : null;
+  const chosen = degreeCount(S.scale);
+  $("scaleHint").innerHTML = need !== null && chosen !== need
+    ? `<span style="color:var(--clash)">${S.scale} has ${chosen} notes; the source has ${need}.
+       Translation needs an equal count.</span>`
+    : `Shared by every mode — the scale this clip is measured against.`;
 
   $("refField").style.display = $("markOutside").checked ? "" : "none";
   const detected = S.analysis && S.analysis.key ? S.analysis.key.name : "—";
   $("refHint").textContent = $("refSel").value === "detected"
     ? `Using the engine's detected key (${detected}).`
-    : (S.op === "none" || S.op === "transpose"
-        ? "No target scale is selected — pick a transformation, or switch to the detected key."
-        : `Using ${PC[S.root]} ${S.scale}.`);
+    : `Using ${PC[S.root]} ${S.scale}.`;
+}
+
+function bindSel(id, key, num) {
+  const el = $(id); if (!el) return;
+  el.addEventListener("change", e => {
+    S[key] = num ? parseInt(e.target.value, 10) : e.target.value;
+    syncRail(); recompute();
+  });
+}
+
+function applyDetectedSource() {
+  const k = S.analysis && S.analysis.key;
+  if (!k) return;
+  const [tonic, mode] = k.name.split(" ");
+  if (PC.indexOf(tonic) >= 0) S.sourceRoot = PC.indexOf(tonic);
+  S.sourceScale = (mode || "").toLowerCase().startsWith("min") ? "Natural Minor" : "Ionian";
 }
 
 /* --------------------------- pairing (L0006) ------------------------------ */
@@ -351,8 +421,9 @@ async function recompute() {
     showOverlay(
       cardinality ? "These scales have different numbers of notes" : "The engine refused",
       err.message,
-      cardinality ? "Use “Clean up / constrain” instead — it will fit the notes, but it may merge neighbours."
-                  : "");
+      cardinality ? "Constraining fits the notes instead of translating them — it may merge neighbours."
+                  : "",
+      cardinality);
   }
 
   await refreshReference();
@@ -475,6 +546,10 @@ function drawReport() {
   const r = (S.after && S.after.report) || {};
   const outside = ($("markOutside").checked && S.refDegrees)
     ? notes.filter(n => !S.refDegrees.includes(((n.pitch%12)+12)%12)).length : null;
+  /* After a REMAP, notes still outside the target are not leftovers — remap is
+     degree-preserving, so chromatic tones keep their alteration by design
+     (engine: notes_chromatic). Calling those "out of scale" reads as failure. */
+  const chromaticKept = S.op === "remap" && S.after && r.notes_chromatic;
   const dropped = S.input.notes.length - notes.length;
   // Only edits that actually MOVED something. remap reports an edit for every
   // chromatic note — including ones whose pitch is unchanged (it is recording the
@@ -493,14 +568,22 @@ function drawReport() {
   } else {
     bits.push(`<span class="stat"><span class="n">${S.input.notes.length}</span><span class="k">notes</span></span>`);
   }
-  if (outside !== null) bits.push(`<span class="stat outside"><span class="n">${outside}</span><span class="k">out of scale</span></span>`);
+  if (outside !== null) {
+    bits.push(`<span class="stat kept"><span class="n">${notes.length - outside}</span><span class="k">in scale</span></span>`);
+    bits.push(`<span class="stat outside" title="${chromaticKept
+      ? "Remap preserves chromatic character: these tones keep their alteration against the new scale."
+      : "Pitch classes not in the reference scale."}"><span class="n">${outside}</span><span class="k">${
+      chromaticKept ? "chromatic (kept by design)" : "outside"}</span></span>`);
+  }
   if (edits) bits.push(`<span class="edits">${edits}${realEdits.length>4?"  …":""}</span>`);
   el.innerHTML = bits.join("");
 }
 
-function showOverlay(title, body, fix) {
+function showOverlay(title, body, fix, offerConform) {
   $("ovTitle").textContent = title; $("ovBody").textContent = body;
-  $("ovFix").textContent = fix || ""; $("overlay").classList.remove("hidden");
+  $("ovFix").textContent = fix || "";
+  $("ovAct").style.display = offerConform ? "" : "none";
+  $("overlay").classList.remove("hidden");
 }
 const hideOverlay = () => $("overlay").classList.add("hidden");
 
@@ -582,11 +665,19 @@ function sendBack(result) {
       if (PC.indexOf(tonic) >= 0) S.root = S.sourceRoot = PC.indexOf(tonic);
       const minor = (mode||"").toLowerCase().startsWith("min");
       S.scale = S.sourceScale = minor ? "Natural Minor" : "Ionian";
+      if (S.sourceFromDetected) applyDetectedSource();
     }
   } catch (err) {
     $("keyName").textContent = "unavailable";
   }
 
+  fillScaleSelect();
+  bindSel("tRoot","root",true);
+  bindSel("tScale","scale");
+  $("ovConstrain").addEventListener("click", () => {
+    S.op = "conform";                       // same target scale, different intent
+    buildOps(); syncRail(); recompute();
+  });
   $("markOutside").addEventListener("change", () => { syncRail(); recompute(); });
   $("refSel").addEventListener("change", () => { syncRail(); recompute(); });
   $("playBefore").addEventListener("click", () => playing==="before" ? stopAll() : play("before"));

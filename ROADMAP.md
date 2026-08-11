@@ -118,6 +118,23 @@ theory in this repo** — theory-driven alters go through the bridge's
   `http://localhost:8765/workshop`, driven end-to-end in a browser against the
   real engine. Still to do before it can replace the four commands: wire the
   extension command + session handoff, and remove the old items (protected path).
+- **Round 2 of human feedback applied 2026-08-11** (trace:
+  traces/2026-08-11-workshop-feedback.md): in-scale count shown alongside
+  outside; scale dropdown shows each scale's note count and marks
+  wrong-cardinality targets red with ✕ *before* you hit a refusal; the Root/Scale
+  control is now **persistent and shared by every mode**, sitting below the
+  transformation params (the reference dropdown no longer says "below" — a
+  positional label that had already gone stale); "use detected key as source"
+  toggle for translate, on by default; the refusal overlay gained a
+  **"Constrain to this scale instead"** button that switches op and keeps the
+  target. Also relabelled: notes left outside after a REMAP are
+  "chromatic (kept by design)", not "outside" — see the answered question below.
+- **Answered (human asked whether purple-after-transform was a bug):** it is
+  correct and it is Q-008(b) already working. Measured against the engine —
+  before: 6 of 20 outside C Dorian; after **conform**: 0; after **remap**: 2
+  (engine agrees: `notes_diatonic=18, notes_chromatic=2`). Conform flattens
+  everything into the scale; remap is degree-preserving, so chromatic tones keep
+  their alteration by design. The behaviour was right, the *label* was wrong.
 - **Prototype covers:** analysis-only default with Render disabled; conform /
   remap / transpose; live `/analyze` chord strip coloured by function; before/
   after roll with ghost outlines and move connectors; out-of-scale marking
