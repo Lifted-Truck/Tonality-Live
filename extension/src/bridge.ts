@@ -139,3 +139,25 @@ export async function fetchScales(): Promise<ScaleInfo[]> {
   const { scales } = await request<{ scales: ScaleInfo[] }>("/scales");
   return scales;
 }
+
+/** What the workshop page hands back when the user hits Render (or Cancel). */
+export interface WorkshopResult {
+  notes: Required<BridgeNote>[] | null;   // null = cancelled
+  report?: ConformReport & { pre_transpose?: number; notes_folded?: number };
+}
+
+/**
+ * Park a clip for the workshop and get the URL to open.
+ *
+ * The modal dialog is a plain web page: it cannot call back into the SDK, so the
+ * clip is handed over out-of-band and the page is told which one to load. The
+ * page is served by the bridge — see ROADMAP Q-004 for why, and for the two
+ * rules that keep a `data:`-URL build possible instead.
+ */
+export async function openWorkshopFor(
+  notes: BridgeNote[],
+  bpm: number,
+): Promise<string> {
+  const { session } = await postJson<{ session: string }>("/session", { notes, bpm });
+  return `${BASE}/workshop?s=${encodeURIComponent(session)}`;
+}

@@ -22,10 +22,12 @@ import {
 import {
   analyze,
   fetchScales,
+  openWorkshopFor,
   transform,
   type AnalyzeResult,
   type TransformPayload,
   type TransformResult,
+  type WorkshopResult,
 } from "./bridge.js";
 import { dedupeCollisions, transpose } from "./transform.js";
 
@@ -138,14 +140,61 @@ export function activate(activation: ActivationContext): void {
     });
   });
 
+  // --- Workshop ----------------------------------------------------------------
+  // One command that will eventually absorb the four above (ROADMAP Q-004). It
+  // is deliberately additive for now: the old items stay until this is proven in
+  // Live, because removing a working path before its replacement is trusted is
+  // how you end up with neither.
+  context.commands.registerCommand("tonality.workshop", async (arg: unknown) => {
+    try {
+      const clip = context.getObjectFromHandle(arg as Handle, MidiClip);
+      if (clip.notes.length === 0) {
+        await showAnalysis(context, { error: "This MIDI clip has no notes." });
+        return;
+      }
+      const url = await openWorkshopFor(
+        clip.notes.map((n) => ({
+          pitch: n.pitch,
+          startTime: n.startTime,
+          duration: n.duration,
+          velocity: n.velocity ?? 96,
+        })),
+        context.application.song.tempo,
+      );
+      const reply = await context.ui.showModalDialog(url, 1040, 720);
+      const result = JSON.parse(reply) as WorkshopResult;
+      if (!result.notes) return;                     // cancelled
+
+      // The page has already applied the transformation; the collisions it may
+      // have created are still ours to clean up (engine ruling R2).
+      const { notes, removed } = dedupeCollisions(
+        result.notes,
+        result.report?.collisions ?? [],
+      );
+      context.withinTransaction(() => {
+        clip.notes = notes;
+      });
+      if (removed > 0) {
+        await showAnalysis(context, {
+          note: `Rendered. ${removed} note${removed === 1 ? "" : "s"} landed on a ` +
+                `pitch already in use and ${removed === 1 ? "was" : "were"} merged away.`,
+        });
+      }
+    } catch (err) {
+      console.error("tonality.workshop failed:", err);
+      await showAnalysis(context, { error: String(err) });
+    }
+  });
+
   // --- Menu wiring -------------------------------------------------------------
+  context.ui.registerContextMenuAction("MidiClip", "Tonality Workshop…", "tonality.workshop");
   context.ui.registerContextMenuAction("MidiClip", "Analyze with Tonality", "tonality.analyzeClip");
   context.ui.registerContextMenuAction("MidiClip", "Transpose…", "tonality.transpose");
   context.ui.registerContextMenuAction("MidiClip", "Fit to Key…", "tonality.fitToKey");
   context.ui.registerContextMenuAction("MidiClip", "Conform to Scale…", "tonality.conformToScale");
 
   console.log(
-    "[tonality] ready — 4 MidiClip actions registered; bridge expected at " +
+    "[tonality] ready — 5 MidiClip actions registered; bridge expected at " +
       (process.env.TONALITY_BRIDGE_URL ?? "http://127.0.0.1:8765"),
   );
 }

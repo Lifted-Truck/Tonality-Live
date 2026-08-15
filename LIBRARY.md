@@ -137,6 +137,26 @@ unverified). Entry format:
   valid (but pairing via `edits` still works, so prefer it regardless).
 | supersedes: —
 
+[L0008] Resolve ExtensionHost.txt from the running host, never by newest-mtime
+| tier: candidate | added: 2026-08-11
+| tags: ableton-sdk-quirks, extension-lifecycle
+| lesson: The host log lives in a **version-stamped** directory
+  (`~/Library/Preferences/Ableton/Live <ver>/ExtensionHost.txt`), and a beta
+  update silently moves it — Live went 12.4.5b10 → b11 mid-session here. Picking
+  the directory by newest mtime (`ls -dt`) is wrong twice over: an old version's
+  folder can be touched more recently than the live one (b7 sorted first while
+  b11 was in use), so you end up reading a stale log and concluding the extension
+  did not load, or that an old build is still installed. Resolve it from the
+  running process instead:
+  `ps aux | grep -o "logFilePath':'[^']*'"` — the host is launched with its log
+  path as an argument, so this is authoritative.
+| evidence: 2026-08-11 — spent a cycle reading b10's log showing "4 MidiClip
+  actions" while the running host wrote to b11; `ls -dt` ranked b7 first by mtime.
+| falsifier: the SDK/CLI gains a documented way to query the active log path, or
+  Live stops version-stamping the preferences directory.
+| supersedes: — (sharpens L0005's diagnostic order: step 0 is "am I even reading
+  the right log?")
+
 [L0005] An extension that logs nothing looks exactly like one that failed
 | tier: candidate | added: 2026-08-10
 | tags: extension-lifecycle, ableton-sdk-quirks

@@ -300,6 +300,59 @@ class RemapByDegree(unittest.TestCase):
 
 
 @unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
+class WorkshopHandoff(unittest.TestCase):
+    """The clip handoff the workshop page depends on.
+
+    The modal dialog is a plain web page and cannot call back into the SDK, so
+    the extension parks the clip here and passes an id in the URL.
+    """
+
+    CLIP = {"bpm": 120, "notes": [{"pitch": 60, "startTime": 0, "duration": 1}]}
+
+    def test_round_trip(self):
+        sid = server.put_session(self.CLIP)
+        got = server.get_session(sid)
+        self.assertEqual(got["notes"], self.CLIP["notes"])
+        self.assertEqual(got["bpm"], 120)
+
+    def test_empty_clip_rejected(self):
+        with self.assertRaises(ValueError):
+            server.put_session({"bpm": 120, "notes": []})
+        with self.assertRaises(ValueError):
+            server.put_session({"bpm": 120})
+
+    def test_unknown_session_raises_keyerror(self):
+        # -> 404 at the HTTP layer, so a stale dialog URL fails legibly.
+        with self.assertRaises(KeyError):
+            server.get_session("definitely-not-a-session")
+
+    def test_demo_session_is_available_and_labelled(self):
+        # The affordance that lets the page open in a plain browser with no Live.
+        demo = server.get_session("demo")
+        self.assertTrue(demo["demo"])
+        self.assertGreater(len(demo["notes"]), 0)
+
+    def test_store_is_capped(self):
+        # A long Live session would otherwise accumulate clips forever.
+        for _ in range(server._SESSION_CAP + 10):
+            server.put_session(self.CLIP)
+        self.assertLessEqual(len(server._SESSIONS), server._SESSION_CAP)
+
+    def test_workshop_page_has_its_base_injected(self):
+        # Rule 2 of the delivery design: the page never infers its own origin.
+        html = server.workshop_page("localhost:8765").decode()
+        self.assertNotIn("__TONALITY_BASE__", html)
+        self.assertIn('const BASE = "http://localhost:8765"', html)
+
+    def test_workshop_page_rejects_a_non_loopback_host(self):
+        # The Host header is attacker-influenced and becomes the page's fetch
+        # base, so anything but a loopback name falls back to our own address.
+        html = server.workshop_page("evil.example.com").decode()
+        self.assertNotIn("evil.example.com", html)
+        self.assertIn(f'const BASE = "http://{server.HOST}:{server.PORT}"', html)
+
+
+@unittest.skipUnless(_HAVE_ENGINE, "mts engine not importable (run with the Tonality venv)")
 class ScaleCatalog(unittest.TestCase):
     def test_scales_are_served_from_the_engine(self):
         out = server.scales()
