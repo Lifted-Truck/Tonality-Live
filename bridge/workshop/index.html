@@ -106,6 +106,10 @@
   .seg-btns button[aria-pressed="true"]{background:#4a4a4a;color:#fff}
   .seg-btns button:disabled{color:#555;cursor:default}
   .audlabel{color:var(--ink-faint);font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+  .loopchk{margin:0 0 0 4px;font-size:11px;color:var(--ink-dim)}
+  .chordstrip .seg{cursor:pointer}
+  .chordstrip .seg:hover{filter:brightness(1.35)}
+  .chordstrip .seg.playing{box-shadow:inset 0 0 0 1px var(--accent)}
   footer .spacer{flex:1}
   .btn{background:var(--sunk);color:var(--ink);border:1px solid #151515;border-radius:3px;
        padding:5px 13px;font:inherit;font-size:11.5px;cursor:pointer}
@@ -217,6 +221,9 @@
     <button id="playAfter" aria-pressed="false" disabled>▶ After</button>
     <button id="stop">■</button>
   </div>
+  <label class="check loopchk" title="Keep looping so you can A/B the change while it plays.">
+    <input type="checkbox" id="loopMode" checked /><span>Loop</span>
+  </label>
   <span class="note" id="renderNote"></span>
   <span class="spacer"></span>
   <button class="btn" id="cancel">Cancel</button>
@@ -272,7 +279,7 @@ const S = {
   input:null, analysis:null, scales:[], op:"none",
   root:0, scale:"Ionian", sourceRoot:0, sourceScale:"Ionian", tieBreak:"previous",
   shift:0, after:null, refDegrees:null, busy:false, sourceFromDetected:true,
-  foldChromatics:false, afterAnalysis:null, preTranspose:0,
+  foldChromatics:false, afterAnalysis:null, preTranspose:0, hoverRange:null,
 };
 
 /* ------------------------------ rail ------------------------------------- */
@@ -635,6 +642,22 @@ function draw() {
     g.beginPath(); g.moveTo(bx(b),0); g.lineTo(bx(b),H); g.stroke();
   }
 
+  /* Criterion 3: the audible region, drawn. `region` is the chord-segment
+     audition range; hoverRange is the segment under the cursor. Both are beat
+     ranges, so one painter serves both. */
+  const band = (r, fill, line) => {
+    if (!r) return;
+    const x0 = bx(r[0]), x1 = bx(r[1]);
+    g.fillStyle = fill; g.fillRect(x0, 0, x1 - x0, H);
+    g.strokeStyle = line; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x0 + 0.5, 0); g.lineTo(x0 + 0.5, H);
+    g.moveTo(x1 - 0.5, 0); g.lineTo(x1 - 0.5, H);
+    g.stroke();
+  };
+  band(S.hoverRange, "rgba(127,208,255,.07)", "rgba(127,208,255,.35)");
+  if (ac && region) band(region, "rgba(255,165,82,.09)", "rgba(255,165,82,.45)");
+
   /* Keyboard gutter: every lane named, in-scale lanes lit. Black/white keys give
      the shape you already read fluently; the accent tint says "in this scale",
      so a scale can be read straight off the left edge. */
@@ -693,6 +716,11 @@ function draw() {
       g.strokeStyle = moved ? "#f0c078" : "#c4a0e8"; g.lineWidth = 1;
       if (rounded) g.stroke(); else g.strokeRect(x,y,w,h);
     }
+    // Member notes of the hovered chord segment (criterion 2).
+    if (S.hoverRange && n.startTime >= S.hoverRange[0] && n.startTime < S.hoverRange[1]) {
+      g.strokeStyle = "#7fd0ff"; g.lineWidth = 1.5;
+      g.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+    }
   }
 }
 
@@ -705,16 +733,39 @@ function drawChords() {
 
 function paintStrip(el, ch) {
   el.innerHTML = "";
+  const isTrivial = (c) => !!(c.pcs && c.pcs.length === 1);
   ch.forEach((c,i) => {
     const start = c.onset ?? 0;
     const end = i+1 < ch.length ? (ch[i+1].onset ?? BEATS) : BEATS;
-    const trivial = c.pcs && c.pcs.length === 1;
+    const trivial = isTrivial(c);
+    /* A chord's AUDITION range runs to the next real chord, swallowing the
+       single-pitch tails the engine reports as the last note of a chord decays.
+       Without this, clicking "C maj" loops one beat and clicking its tail loops
+       0.2 of one — musically useless targets. The tails still render (greyed);
+       they just are not click targets of their own. */
+    let auditionEnd = end;
+    for (let j = i + 1; j < ch.length; j++) {
+      if (!isTrivial(ch[j])) break;
+      auditionEnd = j + 1 < ch.length ? (ch[j+1].onset ?? BEATS) : BEATS;
+    }
     const d = document.createElement("div");
     d.className = "seg " + (trivial ? "trivial" : (c.role || ""));
     d.style.left = (start/BEATS*100)+"%";
     d.style.width = ((end-start)/BEATS*100)+"%";
     d.textContent = trivial ? "" : c.name;
-    d.title = `${c.name}${c.role ? " · "+c.role : ""} @ beat ${start}`;
+    d.title = `${c.name}${c.role ? " · "+c.role : ""} @ beat ${start} — click to audition`;
+    // Criterion 2: click auditions just this segment; hover lights its notes.
+    if (trivial) { d.style.pointerEvents = "none"; el.appendChild(d); return; }
+    d.addEventListener("click", () => {
+      const active = d.classList.contains("playing");
+      for (const s of document.querySelectorAll(".chordstrip .seg")) s.classList.remove("playing");
+      if (active) { stopAll(); return; }     // clicking the playing segment stops it
+      // Mark AFTER starting: play() calls stopAll(), which clears the marks.
+      auditionRange(start, auditionEnd);
+      if (ac) d.classList.add("playing");
+    });
+    d.addEventListener("mouseenter", () => { S.hoverRange = [start, auditionEnd]; draw(); });
+    d.addEventListener("mouseleave", () => { S.hoverRange = null; draw(); });
     el.appendChild(d);
   });
 }
@@ -770,44 +821,114 @@ function showOverlay(title, body, fix, offerConform) {
 }
 const hideOverlay = () => $("overlay").classList.add("hidden");
 
-/* ------------------------------- audio ----------------------------------- */
-let ac = null, playing = null, raf = 0;
-function stopAll() {
-  if (ac) { try { ac.close(); } catch(_){} ac = null; }
-  cancelAnimationFrame(raf); playing = null;
-  $("playhead").style.opacity = 0;
-  $("playBefore").setAttribute("aria-pressed","false");
-  $("playAfter").setAttribute("aria-pressed","false");
+/* ------------------------------- audio -----------------------------------
+   A lookahead scheduler rather than "schedule everything up front". That is
+   what makes criterion 1 possible: notes are committed only ~200ms ahead, so
+   flipping Before/After mid-flight takes effect at the very next note instead
+   of at the end of the pass. Same reason it can loop without a gap. */
+const LOOKAHEAD = 0.2, TICK = 40;
+let ac = null, playing = null, raf = 0, timer = 0;
+let cycleStart = 0, nextIdx = 0, region = null;   // region = [startBeat, endBeat) or null for whole clip
+
+const spb = () => 60 / (S.input.bpm || 120);
+const sourceNotes = () =>
+  (playing === "after" ? (S.after && S.after.notes) : S.input.notes) || [];
+
+function loopBounds() {
+  return region ? region : [0, BEATS];
 }
-function play(which) {
-  stopAll();
-  const notes = which === "before" ? S.input.notes : (S.after && S.after.notes);
-  if (!notes || !notes.length) return;
-  ac = new (window.AudioContext || window.webkitAudioContext)();
-  const spb = 60 / (S.input.bpm || 120), t0 = ac.currentTime + 0.08;
-  const bus = ac.createGain(); bus.gain.value = 0.5; bus.connect(ac.destination);
-  for (const n of notes) {
-    const o = ac.createOscillator(), gn = ac.createGain();
-    o.type = "triangle";
-    o.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
-    const s = t0 + n.startTime * spb, d = Math.max(0.08, n.duration * spb);
-    const peak = 0.09 + ((n.velocity ?? 90)/127) * 0.15;
-    gn.gain.setValueAtTime(0.0001, s);
-    gn.gain.exponentialRampToValueAtTime(peak, s + 0.012);
-    gn.gain.exponentialRampToValueAtTime(0.0001, s + d);
-    o.connect(gn); gn.connect(bus); o.start(s); o.stop(s + d + 0.03);
+
+function stopAll() {
+  if (timer) { clearInterval(timer); timer = 0; }
+  if (ac) { try { ac.close(); } catch (_) {} ac = null; }
+  cancelAnimationFrame(raf); raf = 0;
+  playing = null; region = null;
+  $("playhead").style.opacity = 0;
+  $("playBefore").setAttribute("aria-pressed", "false");
+  $("playAfter").setAttribute("aria-pressed", "false");
+  // A segment must not stay lit after playback ends (loop off, ■, or a stop
+  // triggered from anywhere else) — the mark means "sounding now".
+  for (const s of document.querySelectorAll(".chordstrip .seg.playing")) s.classList.remove("playing");
+  draw();                                   // clear the loop shading
+}
+
+function voice(n, when) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = "triangle";
+  o.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+  const d = Math.max(0.08, n.duration * spb());
+  const peak = 0.09 + ((n.velocity ?? 90) / 127) * 0.15;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(peak, when + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + d);
+  o.connect(g); g.connect(ac.destination);
+  o.start(when); o.stop(when + d + 0.03);
+}
+
+/* Commit whatever falls inside the lookahead window, re-reading the CURRENT
+   source each time so a toggle is picked up by the next unscheduled note. */
+function schedule() {
+  if (!ac) return;
+  const [lo, hi] = loopBounds(), span = (hi - lo) * spb();
+  const inWindow = ac.currentTime + LOOKAHEAD;
+  while (true) {
+    const notes = sourceNotes()
+      .filter((n) => n.startTime >= lo && n.startTime < hi)
+      .sort((a, b) => a.startTime - b.startTime);
+    if (nextIdx >= notes.length) {
+      // Wrap to the next cycle only once the current one has fully elapsed.
+      if (cycleStart + span > inWindow) return;
+      if (!$("loopMode").checked) { stopAll(); return; }
+      cycleStart += span; nextIdx = 0;
+      continue;
+    }
+    const n = notes[nextIdx];
+    const when = cycleStart + (n.startTime - lo) * spb();
+    if (when > inWindow) return;
+    if (when >= ac.currentTime) voice(n, when);
+    nextIdx += 1;
   }
+}
+
+function play(which, opts) {
+  const wasPlaying = !!ac;
+  const sameRegion = JSON.stringify(region) === JSON.stringify((opts && opts.region) || null);
+  // Criterion 1: switching source while playing must NOT restart — keep the
+  // clock, just let the scheduler read the other material from here on.
+  if (wasPlaying && sameRegion) {
+    playing = which;
+    $("playBefore").setAttribute("aria-pressed", String(which === "before"));
+    $("playAfter").setAttribute("aria-pressed", String(which === "after"));
+    return;
+  }
+  stopAll();
   playing = which;
-  $(which === "before" ? "playBefore" : "playAfter").setAttribute("aria-pressed","true");
-  const ph = $("playhead"); ph.style.opacity = 1;
-  const dur = BEATS * spb;
-  (function tick(){
+  region = (opts && opts.region) || null;
+  if (!sourceNotes().length) { playing = null; return; }
+
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  cycleStart = ac.currentTime + 0.08;
+  nextIdx = 0;
+  $(which === "before" ? "playBefore" : "playAfter").setAttribute("aria-pressed", "true");
+  $("playhead").style.opacity = 1;
+  draw();                                   // paint the loop region
+  schedule();
+  timer = setInterval(schedule, TICK);
+
+  (function tick() {
     if (!ac) return;
-    const el = ac.currentTime - t0;
-    if (el > dur) { stopAll(); return; }
-    ph.style.left = (Math.max(0,el)/dur*100)+"%";
+    const [lo, hi] = loopBounds(), span = (hi - lo) * spb();
+    let el = ac.currentTime - cycleStart;
+    while (el > span) el -= span;            // playhead follows the loop
+    const frac = (lo + Math.max(0, el) / spb()) / BEATS;
+    $("playhead").style.left = (frac * 100) + "%";
     raf = requestAnimationFrame(tick);
   })();
+}
+
+/** Audition one chord segment: loops just that stretch until stopped. */
+function auditionRange(startBeat, endBeat) {
+  play(playing || "before", { region: [startBeat, endBeat] });
 }
 
 /* ------------------------------ handoff back ------------------------------ */

@@ -405,7 +405,19 @@ theory in this repo** — theory-driven alters go through the bridge's
   a model in front of it.
 
 ### Q-014 — A/B loop audition + chord-strip interaction
-- **Status:** open, ready. Human-selected 2026-08-15. Pure UI, no engine work.
+- **Status:** done 2026-08-15 (trace: traces/2026-08-15-q014-loop-audition.md).
+  Pure UI, no engine work — as scoped.
+- **How criterion 1 was met:** replaced one-shot scheduling with a **lookahead
+  scheduler** (200ms window, 40ms tick) that re-reads the current source each
+  pass. Notes are committed only just before they sound, so a Before/After
+  toggle takes effect at the next note rather than the next pass, and looping
+  needs no gap. Verified programmatically: toggling mid-play keeps the same
+  `AudioContext` and the same `cycleStart` — it does not restart.
+- **Chord tails are absorbed into the preceding chord's audition range.** The
+  engine reports single-pitch tails as the last note of a chord decays (4 of 12
+  segments on the demo clip); clicking one looped 0.2 of a beat. Tails now
+  render greyed but are not click targets, and a chord's range runs to the next
+  *real* chord — `C maj7` auditions [1,2), not [1,1.8).
 - **Acceptance criteria:**
   1. Loop mode: the clip loops in Web Audio and a Before/After toggle switches
      the material *while playing*, seamlessly at the next beat boundary. This is
