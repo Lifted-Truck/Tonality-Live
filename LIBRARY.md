@@ -137,6 +137,28 @@ unverified). Entry format:
   valid (but pairing via `edits` still works, so prefer it regardless).
 | supersedes: —
 
+[L0009] The host's fs sandbox binds Node, not the children Node spawns
+| tier: candidate | added: 2026-08-15
+| tags: ableton-sdk-quirks, extension-lifecycle
+| lesson: The Extension Host runs Node with `--permission --allow-child-process
+  --allow-fs-read=<Extensions dir> --allow-fs-read=<Extensions Data dir>
+  --allow-fs-write=<Extensions Data dir>`. Two consequences that pull in
+  opposite directions: (a) `child_process.spawn` of an interpreter anywhere on
+  disk WORKS — the permission model does not propagate to the child; but (b)
+  any Node fs call on a path outside the allowlist (`existsSync`, `readFileSync`
+  on `~/Documents/...`) throws "Access to this API has been restricted. Use
+  --allow-fs-read to manage permissions." So do not "helpfully" pre-check a
+  path you are about to spawn — let spawn's ENOENT tell you. The only
+  extension-writable location is `environment.storageDirectory` (under
+  Extensions Data); machine-local config belongs there.
+| evidence: 2026-08-15 — spawn of the venv python from an identically-flagged
+  node ran server.py up to bind(); the same build's existsSync(cfg.python)
+  failed live in Live with the restricted-API error, masquerading as a bad
+  config. Removing the pre-flight made auto-start work first try.
+| falsifier: a future SDK/host loosens or documents the allowlist, or Node's
+  permission model starts propagating to spawned children.
+| supersedes: —
+
 [L0008] Resolve ExtensionHost.txt from the running host, never by newest-mtime
 | tier: candidate | added: 2026-08-11
 | tags: ableton-sdk-quirks, extension-lifecycle

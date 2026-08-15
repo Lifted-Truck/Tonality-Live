@@ -4,7 +4,20 @@
  * so we just use global `fetch`.
  */
 
+import { ensureBridge } from "./bridgeProcess.js";
+
 const BASE = process.env.TONALITY_BRIDGE_URL ?? "http://127.0.0.1:8765";
+export const BRIDGE_BASE = BASE;
+
+/**
+ * The extension's storage directory, handed over once by activate(). Needed so
+ * a failed request can try to auto-start the bridge (ROADMAP Q-011) — the
+ * launch config lives there because it is machine identity.
+ */
+let storageDir: string | undefined;
+export function configureBridgeAutostart(dir: string | undefined): void {
+  storageDir = dir;
+}
 
 export interface BridgeNote {
   pitch: number;
@@ -101,11 +114,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, init);
-  } catch (err) {
-    throw new Error(
-      `Can't reach the Tonality bridge at ${BASE}. Start it first:\n` +
-        `  <Tonality>/.venv/bin/python3 <Tonality-Live>/bridge/server.py\n(${String(err)})`,
-    );
+  } catch (firstErr) {
+    // The bridge is down. Try to bring it up ONCE, then retry the same request.
+    // ensureBridge throws an actionable message when it cannot (no config, spawn
+    // failure, no /health in time) — that message is what the user sees, so the
+    // failure is never a silent hang and never a bare "fetch failed".
+    try {
+      await ensureBridge(BASE, storageDir);
+    } catch (startErr) {
+      throw new Error(`${(startErr as Error).message}\n(original error: ${String(firstErr)})`);
+    }
+    response = await fetch(`${BASE}${path}`, init);
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");

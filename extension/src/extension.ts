@@ -21,6 +21,7 @@ import {
 
 import {
   analyze,
+  configureBridgeAutostart,
   fetchScales,
   openWorkshopFor,
   transform,
@@ -29,15 +30,20 @@ import {
   type TransformResult,
   type WorkshopResult,
 } from "./bridge.js";
+import { launchConfigPath, readLaunchConfig, writeLaunchConfig } from "./bridgeProcess.js";
 import { dedupeCollisions, transpose } from "./transform.js";
 
 import analysisHtml from "../ui/analysis.html";
+import bridgeSetupHtml from "../ui/bridge-setup.html";
 import conformToScaleHtml from "../ui/conform-to-scale.html";
 import fitToKeyHtml from "../ui/fit-to-key.html";
 import transposeHtml from "../ui/transpose.html";
 
 export function activate(activation: ActivationContext): void {
   const context = initialize(activation, "1.0.0");
+  // Q-011: lets a failed request try to auto-start the bridge. The launch config
+  // is machine identity, so it lives in the host-provided storage dir.
+  configureBridgeAutostart(context.environment.storageDirectory);
 
   // Announce activation. Not decoration: Live's ExtensionHost.txt is the only
   // window into whether an extension loaded, and an extension that logs nothing
@@ -186,16 +192,60 @@ export function activate(activation: ActivationContext): void {
     }
   });
 
+  // --- Bridge auto-start setup (Q-011) -------------------------------------------
+  // A one-time, per-machine step: record where the venv python and server.py are.
+  // Registered on the MidiClip menu because that is the only scope we use, and it
+  // keeps the setup discoverable next to the commands that need the bridge.
+  context.commands.registerCommand("tonality.setupBridge", async () => {
+    try {
+      const dir = context.environment.storageDirectory;
+      if (!dir) {
+        await showAnalysis(context, {
+          error: "Live did not provide a storage directory for this extension, so auto-start " +
+                 "cannot be configured. Start the bridge by hand instead.",
+        });
+        return;
+      }
+      const existing = readLaunchConfig(dir);
+      const html = bridgeSetupHtml
+        .replace("__PYTHON__", existing?.python ?? "")
+        .replace("__SERVER__", existing?.server ?? "")
+        .replace("__REPO__", existing?.tonalityRepo ?? "");
+      const url = `data:text/html,${encodeURIComponent(html)}`;
+      const reply = await context.ui.showModalDialog(url, 460, 400);
+      const r = JSON.parse(reply) as {
+        python: string | null; server?: string; tonalityRepo?: string | null;
+      };
+      if (!r.python || !r.server) return;                     // cancelled
+      const path = writeLaunchConfig(dir, {
+        python: r.python,
+        server: r.server,
+        ...(r.tonalityRepo ? { tonalityRepo: r.tonalityRepo } : {}),
+      });
+      await showAnalysis(context, {
+        note: `Saved. The bridge will be started automatically when a Tonality command ` +
+              `finds it down. (${path})`,
+      });
+    } catch (err) {
+      console.error("tonality.setupBridge failed:", err);
+      await showAnalysis(context, { error: String(err) });
+    }
+  });
+
   // --- Menu wiring -------------------------------------------------------------
   context.ui.registerContextMenuAction("MidiClip", "Tonality Workshop…", "tonality.workshop");
   context.ui.registerContextMenuAction("MidiClip", "Analyze with Tonality", "tonality.analyzeClip");
   context.ui.registerContextMenuAction("MidiClip", "Transpose…", "tonality.transpose");
   context.ui.registerContextMenuAction("MidiClip", "Fit to Key…", "tonality.fitToKey");
   context.ui.registerContextMenuAction("MidiClip", "Conform to Scale…", "tonality.conformToScale");
+  context.ui.registerContextMenuAction("MidiClip", "Tonality: Set up bridge auto-start…", "tonality.setupBridge");
 
   console.log(
-    "[tonality] ready — 5 MidiClip actions registered; bridge expected at " +
-      (process.env.TONALITY_BRIDGE_URL ?? "http://127.0.0.1:8765"),
+    "[tonality] ready — 6 MidiClip actions registered; bridge expected at " +
+      (process.env.TONALITY_BRIDGE_URL ?? "http://127.0.0.1:8765") +
+      (readLaunchConfig(context.environment.storageDirectory)
+        ? "; auto-start configured"
+        : `; auto-start NOT configured (${launchConfigPath(context.environment.storageDirectory)})`),
   );
 }
 

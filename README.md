@@ -73,11 +73,18 @@ On this machine:
    clone Tonality somewhere other than `~/Documents/Tonality`, set
    `TONALITY_REPO=/path/to/Tonality` so the bridge finds the source tree.
 2. Enable **Developer Mode** in Live → *Preferences → Extensions*.
-3. Start the bridge with the Tonality venv's python (keep it running):
+3. Start the bridge — **either** by hand with the Tonality venv's python:
    ```bash
    /path/to/Tonality/.venv/bin/python3 bridge/server.py
    # then verify:  curl -s localhost:8765/health   → {"ok": true, "mts": "..."}
    ```
+   **or** let the extension start it for you: once, right-click a MIDI clip →
+   *Extensions → Tonality: Set up bridge auto-start…* and enter the venv python
+   path and the path to `bridge/server.py`. After that, any Tonality command that
+   finds the bridge down starts it and waits for it (bounded, ~10s). The paths
+   are saved in the extension's own storage folder, never in this repo. The
+   spawned bridge is detached and outlives Live on purpose — the next launch
+   reuses it rather than starting another.
 4. Build + load the extension into Live:
    ```bash
    cd extension

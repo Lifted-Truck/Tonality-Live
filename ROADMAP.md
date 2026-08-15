@@ -320,14 +320,33 @@ theory in this repo** — theory-driven alters go through the bridge's
   layer and reuses `_sequence_from_payload` unchanged.
 
 ### Q-011 — Auto-start the bridge from the extension
-- **Status:** open, ready. Human-selected 2026-08-15 (feature workshop).
+- **Status:** done 2026-08-15 (trace: traces/2026-08-15-q011-autostart.md).
+  **Verified in Live with the bridge deliberately down:** Analyze produced a
+  real result (C major, margin 0.27) instead of an error; exactly one bridge
+  process afterwards, and a second command reused it (same PID, no duplicate).
+- **Lifecycle ruling (criterion 4): DETACHED**, for two verified reasons — the
+  SDK exposes no deactivate hook (`ExtensionContext` is exactly
+  application/commands/environment/resources/ui), so reap-on-deactivate is not
+  available; and idempotence (spawn only when nothing answers `/health`) makes
+  a bridge that outlives Live *reused*, not duplicated. Same as starting it by
+  hand, minus the hand.
+- **Config lives in `environment.storageDirectory/bridge-launch.json`** — the
+  host-provided writable dir — set once via "Tonality: Set up bridge
+  auto-start…". Nothing in a tracked file; no `.env` involvement.
+- **Sandbox finding (load-bearing, cost one failed live run):** the host runs
+  Node under `--permission --allow-fs-read=<Extensions dirs>`. That restricts
+  what *Node* may read, not what a spawned *child* may open. So `spawn` of a
+  python in `~/Documents` works — but an `existsSync()` pre-flight on that same
+  path throws "Access to this API has been restricted", which masqueraded as a
+  config error. Removed the pre-flight; a wrong path now surfaces through
+  spawn's own ENOENT. See LIBRARY L0009.
 - **Why:** the only manual step left between "right-click a clip" and "it works"
   is starting `bridge/server.py` by hand. The Extension Host is a full Node
   runtime, so the extension can spawn it. The new engine indicator (56fbe7f)
   makes the come-up visible.
 - **Scope:** `extension/src/` (spawn + readiness wait), `.env` (venv python path
   + `TONALITY_REPO` — machine-local, gitignored), README.
-- **Acceptance criteria:**
+- **Acceptance criteria (all ✅ — unit-tested AND verified in Live):**
   1. If `/health` fails on any command, the extension spawns the bridge with the
      configured interpreter, waits for `/health` (bounded, e.g. 10s), then
      proceeds; failure to come up shows the "start the bridge" message with the
