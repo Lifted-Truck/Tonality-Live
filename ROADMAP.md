@@ -113,11 +113,13 @@ theory in this repo** — theory-driven alters go through the bridge's
   HTML, not reachable from node:test). Verified by DOM check + in-Live measurement.
 
 ### Q-004 — Collapse the extension into one "workshop" GUI
-- **Status:** in progress — **working prototype, bridge-served** (trace:
-  traces/2026-08-11-workshop-prototype.md). Live at
-  `http://localhost:8765/workshop`, driven end-to-end in a browser against the
-  real engine. Still to do before it can replace the four commands: wire the
-  extension command + session handoff, and remove the old items (protected path).
+- **Status:** in progress — **wired into Live and reported working** (human,
+  2026-08-15: "it seems to be working so far"). `tonality.workshop` opens the
+  bridge-served page from a real clip via `/session` and renders back in one
+  undo step (b897755). Header now carries an engine status indicator (56fbe7f).
+  Still to do before it can *replace* the four commands: (a) more time in Live
+  to trust it, (b) remove the old items — protected path, needs the human's gate.
+  Follow-on features are queued as Q-011…Q-018.
 - **Round 2 of human feedback applied 2026-08-11** (trace:
   traces/2026-08-11-workshop-feedback.md): in-scale count shown alongside
   outside; scale dropdown shows each scale's note count and marks
@@ -316,6 +318,136 @@ theory in this repo** — theory-driven alters go through the bridge's
   wrapper takes `events: list[list]`, but `mts.generate.remap.remap_by_degree`
   takes a **`Sequence`** exactly like conform, so the bridge calls the generate
   layer and reuses `_sequence_from_payload` unchanged.
+
+### Q-011 — Auto-start the bridge from the extension
+- **Status:** open, ready. Human-selected 2026-08-15 (feature workshop).
+- **Why:** the only manual step left between "right-click a clip" and "it works"
+  is starting `bridge/server.py` by hand. The Extension Host is a full Node
+  runtime, so the extension can spawn it. The new engine indicator (56fbe7f)
+  makes the come-up visible.
+- **Scope:** `extension/src/` (spawn + readiness wait), `.env` (venv python path
+  + `TONALITY_REPO` — machine-local, gitignored), README.
+- **Acceptance criteria:**
+  1. If `/health` fails on any command, the extension spawns the bridge with the
+     configured interpreter, waits for `/health` (bounded, e.g. 10s), then
+     proceeds; failure to come up shows the "start the bridge" message with the
+     command — never a silent hang.
+  2. Never spawns a second bridge if one is already answering.
+  3. Interpreter path comes from config, never hardcoded (rule: no machine
+     identity in tracked files); a missing config degrades to today's message.
+  4. Spawned process is detached from the extension's lifetime OR cleanly reaped
+     on `deactivate` — decide and document; a zombie bridge on every Live restart
+     is worse than the manual step.
+- **Out of scope:** installing the Tonality venv; that stays a README step.
+
+### Q-012 — "Repair / clean up" transformation (ruleset-based)
+- **Status:** open, ready. Human-selected 2026-08-15.
+- **Engine surface (verified 2026-08-15):** `mts/search/repair.py:162`
+  `repair_sequence(sequence, ruleset, *, max_edits≤6, pitch_window, allowed_pcs,
+  max_evaluations, max_repairs) -> RepairResult` — minimal re-pitch edits making
+  the sequence satisfy a ruleset's hard rules. Rule families shipped: `harmony`,
+  `melody`, `voice_motion`. Takes a `Sequence` like conform/remap.
+- **Why:** first *rule*-based op in the workshop, distinct from scale ops: "fix
+  awkward leaps / forbidden parallels" rather than "make it Dorian". Tonality
+  called a cleanup surface "a thin layer over shipped machinery"
+  (response-recommendations.md).
+- **Scope:** `bridge/server.py` (`op:"repair"` on `/transform`, ruleset from a
+  new `GET /rulesets` served from the engine — never hardcoded), workshop row +
+  params (ruleset picker, `max_edits`), tests, `verify` contract check.
+- **Acceptance criteria:**
+  1. `/transform op=repair` returns `{notes, report}` in the established shape,
+     with the engine's `RepairResult` passed through (which rules were violated,
+     which edits fixed them).
+  2. `allowed_pcs` is wired to the persistent Scale control so repair can be
+     constrained to the chosen scale — composition, not new theory.
+  3. The workshop shows *which rule* each edit satisfied.
+  4. "No repair found within `max_edits`" is a first-class state, not an error.
+- **Human gate at implementation:** `/transform` contract addition (protected).
+
+### Q-013 — Next-chord suggestions panel
+- **Status:** open, ready. Human-selected 2026-08-15. **The shipped half of
+  Q-009** — no Wend needed for the suggestion itself.
+- **Engine surface (verified):** `mts/analysis/succession.py:295`
+  `recommend_next_chord(current=(root_pc, quality), *, tonic_pc, mode, history,
+  qualities, weights_version, vl_neighbours, vl_max_distance) ->
+  NextChordRecommendation`. Ranked, margined, deterministic; `weights_version`
+  is the citable versioned prior their Ruling 1 describes.
+- **Scope:** `bridge/server.py` (`POST /recommend/next-chord`, fed from the
+  clip's last analysed chord + detected key), workshop panel, tests.
+- **Acceptance criteria:**
+  1. Panel lists ranked candidates **with margins and evidence**, never a single
+     collapsed answer (rule 7; their Decision 7).
+  2. Shows the `weights_version` used, so a suggestion is reproducible later.
+  3. Clicking a candidate auditions it (Web Audio) appended after the clip.
+  4. Optional: "append as a placeholder chord" writes one bar — the simplest
+     possible Q-009 realisation, no generator involved.
+- **Note:** this is Tonality's own recommender, so it stays deterministic
+  end-to-end by their guarantee; nothing to pin on our side beyond not adding
+  a model in front of it.
+
+### Q-014 — A/B loop audition + chord-strip interaction
+- **Status:** open, ready. Human-selected 2026-08-15. Pure UI, no engine work.
+- **Acceptance criteria:**
+  1. Loop mode: the clip loops in Web Audio and a Before/After toggle switches
+     the material *while playing*, seamlessly at the next beat boundary. This is
+     how a transformation is actually judged.
+  2. Click a chord segment (before *or* after strip) to audition only that
+     stretch; hover highlights its member notes in the roll.
+  3. Playhead and loop region drawn on the roll.
+- **Out of scope:** any engine call.
+
+### Q-015 — Selection-scoped transforms
+- **Status:** open. Human-selected 2026-08-15.
+- **Intent:** apply a transformation to a beat range (dragged on the roll or
+  typed) instead of the whole clip; notes outside the range pass through
+  untouched.
+- **Design note:** engine calls are unchanged — the consumer splits the note
+  set, transforms the in-range subset, and merges. Pairing (L0006) must be done
+  on the subset only. Analysis-only mode should still show the whole clip.
+- **Acceptance criteria:** range selection UI; out-of-range notes byte-identical
+  after render; report counts reflect the subset; undo is still one step.
+
+### Q-016 — Pin notes
+- **Status:** open. Human-selected 2026-08-15.
+- **Intent:** lock chosen notes so any transform leaves them untouched (a
+  bass note you like, a deliberate blue note).
+- **Design note:** consumer-side exclusion — pinned notes are removed from the
+  request and re-inserted after. **Care:** for remap this can break the walk
+  the engine would otherwise preserve, and for conform it can leave a collision
+  the engine never saw. Show pinned notes distinctly and count them in the report.
+- **Acceptance criteria:** click-to-pin in the roll; pinned notes never appear
+  in `edits`; a pinned note that would have collided is reported.
+
+### Q-017 — Transformation stacking (in-dialog pipeline)
+- **Status:** open. Human-selected 2026-08-15. **Largest of the batch.**
+- **Intent:** apply an op, then transform the *result*, with an in-dialog
+  history you can step back through — the workshop becomes a small pipeline
+  rather than "pick one op".
+- **Design note:** today every change recomputes from the original clip, which
+  is what keeps the before/after view honest. Stacking needs an explicit stage
+  list, with "before" meaning *previous stage* and a way to view the cumulative
+  diff. The fold-chromatics toggle is already a two-stage pipeline in disguise
+  (remap→conform), so it should become the first stacked example rather than a
+  special case. Render commits the whole stack as one undo step.
+- **Acceptance criteria:** stage list with add/remove/reorder; per-stage and
+  cumulative diff; the current fold toggle expressed as two stages; one undo.
+
+### Q-018 — Recommendations UI against Tonality's gap-32 contract
+- **Status:** open, **buildable now against a stated contract**, though the
+  endpoint itself is unscheduled upstream. Human-selected 2026-08-15.
+- **Contract (their response-recommendations.md):** ranked list with margins,
+  per-candidate evidence, **a plan handle per row**; recommendations arrive
+  from a *dedicated* endpoint (never mixed into `/analyze`) and reference plan
+  artifacts, so accept = `inspect plan → apply plan`.
+- **What we can do before the endpoint exists:** build the panel against a
+  fixture that matches the contract, and drive it from Q-013's
+  `recommend_next_chord` as the first live producer (it already returns ranked,
+  margined candidates). When gap 32 ships, swap the producer.
+- **Boundary reminder:** enumeration/evidence/ranking are the engine's; we own
+  dropdowns, presentation, audition, accept. Never a collapsed "best".
+- **Acceptance criteria:** panel renders a ranked list from the fixture and
+  from Q-013 live; each row shows margin + evidence; accept applies via the
+  established render path; nothing model-generated anywhere in the flow.
 
 ### Q-010 — "Voice leading" transform with options (blocked upstream)
 - **Status:** open, **blocked on the provider** — this is `revoice`, which
