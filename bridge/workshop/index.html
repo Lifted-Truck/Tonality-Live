@@ -26,6 +26,12 @@
         padding:2px 7px;border-radius:3px}
   .demo{background:#3a3327;color:var(--accent)}
   header .spacer{flex:1}
+  .engine{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;
+          color:var(--ink-dim);margin-right:10px}
+  .engine .dot{width:7px;height:7px;border-radius:50%;background:#555;flex:none}
+  .engine.ok .dot{background:#6f9f7c;box-shadow:0 0 4px rgba(111,159,124,.8)}
+  .engine.down .dot{background:var(--clash);box-shadow:0 0 4px rgba(201,112,92,.8)}
+  .engine.down{color:var(--clash)}
   .keyread{display:flex;align-items:baseline;gap:6px;font-family:var(--mono);font-size:10.5px}
   .keyread .lbl{color:var(--ink-faint);text-transform:uppercase;letter-spacing:.09em;font-size:9px}
   .keyread .val{color:var(--accent);font-weight:650;font-size:12px}
@@ -126,6 +132,9 @@
   <h1>Tonality Workshop</h1>
   <span class="clip" id="clipInfo">loading…</span>
   <span class="spacer"></span>
+  <span class="engine" id="engine" title="The Tonality engine, reached through the local bridge.">
+    <i class="dot" id="engineDot"></i><span id="engineText">engine…</span>
+  </span>
   <span class="keyread">
     <span class="lbl">detected key</span><span class="val" id="keyName">—</span>
     <span id="keyMargin" style="color:var(--ink-faint)"></span>
@@ -875,6 +884,27 @@ function sendBack(result) {
     }
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") { stopAll(); sendBack({notes:null}); }});
+
+  /* Engine indicator. /health is answered by the bridge only when it imported
+     `mts`, so a green dot means the ENGINE is genuinely reachable, not merely
+     that some process owns the port. Poll gently; flip states visibly. */
+  async function pollEngine() {
+    const el = $("engine");
+    try {
+      const r = await fetch(`${BASE}/health`, { cache: "no-store" });
+      const d = await r.json();
+      if (d && d.ok) {
+        el.className = "engine ok";
+        $("engineText").textContent = `engine mts ${d.mts}`;
+        el.title = "The Tonality engine is running (reached through the local bridge).";
+      } else throw new Error("unexpected health payload");
+    } catch (_) {
+      el.className = "engine down";
+      $("engineText").textContent = "engine offline";
+      el.title = "The bridge is not answering. Transforms and analysis will fail until it is restarted:\n<Tonality>/.venv/bin/python3 <Tonality-Live>/bridge/server.py";
+    }
+  }
+  pollEngine(); setInterval(pollEngine, 10000);
 
   window.addEventListener("resize", () => draw());
   syncRail(); drawChords(); await recompute();
