@@ -4,6 +4,41 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D8 — 2026-08-18 — Vendor the kit-owned gates; adopt the leak gate this repo never had
+
+- **Decision:** source `record`, `leak_gate`, and `kit_integrity` from the
+  vendored, sha256-pinned `.kit/kit-gates.sh` (kit 2.4.0) instead of carrying
+  copies. `./verify` stays project-owned; `.kit/` is machine-owned and any edit
+  to it turns the oracle red by design.
+- **What this repo actually had: no leak gate at all.** Not a drifted copy — a
+  hole. `git log -S'leak_gate' -- verify` returns nothing, so no version of this
+  oracle ever checked for machine-absolute paths, across every commit since the
+  retrofit. The fleet audit (2026-08-18) predicted drifted copies; here the
+  finding is worse and simpler.
+- **`.kit/` was already sitting in the tree, untracked and unsourced** — an
+  earlier sync had installed the mechanism and nothing had wired it. A
+  checksum-perfect copy that `verify` never sources is indistinguishable from no
+  gate at all, which is exactly why "reachable" is proved separately from
+  "present".
+- **Our `record()` was byte-identical to the kit's**, so deleting it lost
+  nothing; it was the kit's copy, adapted only by having been copied.
+- **Missing `.kit/` is a hard exit, not a degraded run.** This is deliberately
+  the opposite of how this repo treats an absent Tonality engine (skip with a
+  printed notice, INTEGRATIONS rule 2). Those are different classes: a missing
+  provider means *cannot check*; a missing privacy gate means *not checking*,
+  and only the second can ship a leak while reading green.
+- **Kit gates accumulate into `ok`** rather than early-returning, so a leak and
+  a broken typecheck are reported in the same run; the project gates keep their
+  early return, since a failed typecheck makes the tests after it meaningless.
+- **Proved fired, not just present:** a planted home-absolute path (the
+  `/Users/<name>/…` shape, written here with a placeholder on purpose) in an
+  *untracked* file is caught — `--untracked` doing its job — and takes
+  `./verify fast` to exit 1. Writing the literal instead cost one red run: the
+  gate caught this very entry, which is the gate working, not a false positive.
+  Prose examples take the placeholder form; no allowlist entry was added,
+  because an exemption on the decision log would have been a permanent hole
+  bought to save one edit.
+
 ## D7 — 2026-08-09 — Wire the conform family; two new public commands; `GET /scales`
 
 - **Decision:** With the engine's conform family shipped (their PR #259), take
