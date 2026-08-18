@@ -62,7 +62,7 @@
      so the chord strips line up with the roll rather than merely looking close. */
   .striprow{display:flex;align-items:stretch;flex:none;border-bottom:1px solid #1e1e1e;
             background:var(--sunk)}
-  .striplabel{width:var(--gutter,92px);flex:none;display:flex;align-items:center;
+  .striplabel{width:var(--gutter,56px);flex:none;display:flex;align-items:center;
       justify-content:flex-end;padding-right:6px;font-family:var(--mono);font-size:8.5px;
       letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);
       border-right:1px solid #1e1e1e;background:var(--sunk-2)}
@@ -78,8 +78,13 @@
   .seg.trivial{background:#202020;color:#4a4a4a}
   .rollwrap{flex:1;position:relative;background:var(--sunk-2);min-height:0}
   canvas{display:block;width:100%;height:100%}
+  /* The playhead is the one overlay NOT drawn on the canvas, so it is also the
+     one that has to redo the canvas's beat->x mapping by hand: .rollwrap spans
+     the keyboard gutter as well as the roll, and a bare percentage would put
+     beat 0 inside the keys. Same --gutter the strips use, so all three agree. */
   .playhead{position:absolute;top:0;bottom:0;width:1px;background:#7fd0ff;
-            box-shadow:0 0 6px #7fd0ff;pointer-events:none;opacity:0;left:0}
+            box-shadow:0 0 6px #7fd0ff;pointer-events:none;opacity:0;
+            left:var(--gutter,56px)}
   .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
            background:rgba(20,20,20,.82);padding:20px;text-align:center}
   .overlay.hidden{display:none}
@@ -447,6 +452,35 @@ function pairAfter(before, edits) {
     if (hit) { hit.used = true; return {...n, pitch: hit.to_midi, _i:i}; }
     return {...n, _i:i};
   });
+}
+
+/* --------------------------- naming the result ---------------------------- */
+/* What key the rendered clip is in, as a display label for the clip name.
+   Sent to the extension rather than derived there: the page is where the target
+   was chosen and where the engine's catalog is already loaded. */
+function resultKeyLabel() {
+  if (!S.after) return null;
+  /* Transpose declares no target, so the only honest answer is what the engine
+     reads back off the result. Conform and remap DO declare one, and the target
+     is definitionally what the clip is now in — asking the detector instead
+     would sometimes answer with the relative major of a modal target. */
+  if (S.op === "transpose")
+    return (S.afterAnalysis && S.afterAnalysis.key && S.afterAnalysis.key.name) || null;
+  return PC[S.root] + " " + S.scale;
+}
+
+/* The scale words that count as "this name already states a key". Assembled
+   from the engine's catalog plus the mode word its analysis actually used
+   ("major"/"minor", which are not catalog entries) — so the extension can
+   recognise a key without holding a scale table of its own. */
+function keyVocab() {
+  const v = S.scales.map(s => s.name);
+  for (const a of [S.analysis, S.afterAnalysis]) {
+    const name = a && a.key && a.key.name;
+    const mode = name && name.split(" ").slice(1).join(" ");
+    if (mode && v.indexOf(mode) < 0) v.push(mode);
+  }
+  return v;
 }
 
 /* ----------------------------- compute ----------------------------------- */
@@ -921,7 +955,10 @@ function play(which, opts) {
     let el = ac.currentTime - cycleStart;
     while (el > span) el -= span;            // playhead follows the loop
     const frac = (lo + Math.max(0, el) / spb()) / BEATS;
-    $("playhead").style.left = (frac * 100) + "%";
+    // Mirrors the canvas's bx(): GUTTER + frac * (W - GUTTER). Expressed in CSS
+    // so it stays correct across resizes without re-reading the layout.
+    $("playhead").style.left =
+      `calc(var(--gutter) + ${frac} * (100% - var(--gutter)))`;
     raf = requestAnimationFrame(tick);
   })();
 }
@@ -997,7 +1034,8 @@ function sendBack(result) {
     if (!S.after) return;
     stopAll();
     const payload = { notes: S.after.notes.map(({_i, ...n}) => n),
-                      report: S.after.report };
+                      report: S.after.report,
+                      keyLabel: resultKeyLabel(), keyVocab: keyVocab() };
     if (!sendBack(payload)) {
       $("renderNote").textContent =
         `→ would write ${payload.notes.length} notes as one undo step`;

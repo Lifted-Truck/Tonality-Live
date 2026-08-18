@@ -17,18 +17,30 @@ TARGET="${1:-fast}"
 HARNESS_DIR=".harness"
 mkdir -p "$HARNESS_DIR"
 
-BRIDGE_URL="${TONALITY_BRIDGE_URL:-http://127.0.0.1:8765}"
+# Kit-owned gates: record, leak_gate, kit_integrity (vendored + checksummed in
+# .kit/, kit 2.4.0). Missing .kit/ is a HARD EXIT, not a degraded run: a
+# silently skipped privacy gate is the exact bug the gate exists to prevent.
+# Note this sources a RELATIVE path — the `cd "$ROOT"` above is what makes it
+# resolve no matter where ./verify was invoked from.
+if [ -r .kit/kit-gates.sh ]; then
+  . .kit/kit-gates.sh
+else
+  echo "verify: .kit/kit-gates.sh missing — run kit_sync.py (gates cannot be skipped)" >&2
+  exit 1
+fi
 
-record() { # record <target> <exit_code>
-  local git_hash; git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "no-git")
-  printf '{"target":"%s","exit":%d,"git":"%s","ts":"%s"}\n' \
-    "$1" "$2" "$git_hash" "$(date -u +%FT%TZ)" > "$HARNESS_DIR/last-verify.json"
-  rm -f "$HARNESS_DIR/dirty"
-  return "$2"
-}
+BRIDGE_URL="${TONALITY_BRIDGE_URL:-http://127.0.0.1:8765}"
 
 fast() {
   # ---- Layer-0: seconds, not minutes. CI-blocking. -------------------------
+  # Kit gates accumulate into `ok` instead of early-returning: a leak and a
+  # broken typecheck are independent failures, and reporting only the first
+  # wastes a run. The project gates below keep their early-return — a failed
+  # typecheck makes the tests after it meaningless.
+  local ok=0
+  kit_integrity || ok=1
+  leak_gate     || ok=1
+
   # 1) TypeScript typecheck — the check that already fronts every build.
   echo "verify[fast]: tsc --noEmit (extension/)"
   if [ ! -d extension/node_modules ]; then
@@ -52,8 +64,8 @@ fast() {
   # 3) Python sources compile (syntax/import-time errors are a real red).
   echo "verify[fast]: py_compile bridge/*.py"
   python3 -m py_compile bridge/server.py bridge/test_bridge.py || return 1
-  echo "verify[fast]: OK"
-  return 0
+  [ "$ok" -eq 0 ] && echo "verify[fast]: OK"
+  return "$ok"
 }
 
 full() {

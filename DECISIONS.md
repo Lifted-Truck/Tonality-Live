@@ -4,6 +4,64 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D9 — 2026-08-18 — Naming a clip with its key is display-layer, and the vocabulary comes from the engine
+
+- **Decision:** the workshop's Render writes the resulting key into the clip
+  name. The append-or-replace policy lives in `nameWithKey`
+  (`extension/src/transform.ts`) where it is pure and unit-testable; the *key
+  label* and the *scale vocabulary* are supplied by the page.
+- **Why this does not breach the no-theory-here invariant.** Recognising the
+  engine's own labels is string work on display data (rule 8), the same licence
+  the page already takes when it parses `"C major"` to preselect a target. What
+  would have breached it is **owning a list of scale names** in order to spot a
+  key in a clip name — so the list is passed in, sourced from `GET /scales` plus
+  the mode word the analysis emitted. `nameWithKey` knows no scale at all; hand
+  it an empty vocabulary and it degrades to a plain append.
+- **The label is the declared target for conform/remap, the detected key for
+  transpose.** Not a stylistic split: measured in the live page, a C-Dorian
+  remap analyses back as `"F major"`. Detection is the only available answer
+  when the user declared no target, and the wrong answer when they did.
+- **Rename shares the note write's transaction.** One Cmd+Z restores both; a
+  clip labelled with a key it is no longer in is worse than one never renamed.
+- **Scope:** the workshop path only. The four legacy commands are unchanged —
+  they are slated for removal under Q-004, and teaching a path that is about to
+  be deleted is work spent twice.
+
+## D8 — 2026-08-18 — Vendor the kit-owned gates; adopt the leak gate this repo never had
+
+- **Decision:** source `record`, `leak_gate`, and `kit_integrity` from the
+  vendored, sha256-pinned `.kit/kit-gates.sh` (kit 2.4.0) instead of carrying
+  copies. `./verify` stays project-owned; `.kit/` is machine-owned and any edit
+  to it turns the oracle red by design.
+- **What this repo actually had: no leak gate at all.** Not a drifted copy — a
+  hole. `git log -S'leak_gate' -- verify` returns nothing, so no version of this
+  oracle ever checked for machine-absolute paths, across every commit since the
+  retrofit. The fleet audit (2026-08-18) predicted drifted copies; here the
+  finding is worse and simpler.
+- **`.kit/` was already sitting in the tree, untracked and unsourced** — an
+  earlier sync had installed the mechanism and nothing had wired it. A
+  checksum-perfect copy that `verify` never sources is indistinguishable from no
+  gate at all, which is exactly why "reachable" is proved separately from
+  "present".
+- **Our `record()` was byte-identical to the kit's**, so deleting it lost
+  nothing; it was the kit's copy, adapted only by having been copied.
+- **Missing `.kit/` is a hard exit, not a degraded run.** This is deliberately
+  the opposite of how this repo treats an absent Tonality engine (skip with a
+  printed notice, INTEGRATIONS rule 2). Those are different classes: a missing
+  provider means *cannot check*; a missing privacy gate means *not checking*,
+  and only the second can ship a leak while reading green.
+- **Kit gates accumulate into `ok`** rather than early-returning, so a leak and
+  a broken typecheck are reported in the same run; the project gates keep their
+  early return, since a failed typecheck makes the tests after it meaningless.
+- **Proved fired, not just present:** a planted home-absolute path (the
+  `/Users/<name>/…` shape, written here with a placeholder on purpose) in an
+  *untracked* file is caught — `--untracked` doing its job — and takes
+  `./verify fast` to exit 1. Writing the literal instead cost one red run: the
+  gate caught this very entry, which is the gate working, not a false positive.
+  Prose examples take the placeholder form; no allowlist entry was added,
+  because an exemption on the decision log would have been a permanent hole
+  bought to save one edit.
+
 ## D7 — 2026-08-09 — Wire the conform family; two new public commands; `GET /scales`
 
 - **Decision:** With the engine's conform family shipped (their PR #259), take

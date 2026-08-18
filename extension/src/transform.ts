@@ -70,3 +70,54 @@ export function dedupeCollisions(
   }
   return { notes: out, removed };
 }
+
+/**
+ * Put the resulting key at the end of a clip name, replacing one already there.
+ *
+ * The rule the user asked for: append the new key, unless the *last thing the
+ * name states* is a key, in which case replace it — so repeated renders leave
+ * one key on the clip rather than a growing tail.
+ *
+ * `vocab` is the set of scale words that count as "a key was stated": it comes
+ * from the engine's own catalog (plus the mode word its analysis used), never
+ * from a table here. That is the whole reason this takes a vocab argument
+ * instead of knowing any scale names — recognising the engine's labels is
+ * display-layer string work (rule 8), but *owning* the list of scales would be
+ * the theory this repo must not hold.
+ *
+ * A bare root is deliberately not enough: "Take C" keeps its C and gets the key
+ * appended, because "C" alone is a take name far more often than a key.
+ */
+export function nameWithKey(current: string, keyLabel: string, vocab: string[]): string {
+  const label = keyLabel.trim();
+  if (!label) return current;
+
+  const base = stripTrailingKey(current.trim(), vocab);
+  return base ? `${base} ${label}` : label;
+}
+
+/** Drop a trailing "<root> <scale>" from `name`, if one is there. */
+function stripTrailingKey(name: string, vocab: string[]): string {
+  const words = vocab
+    .map((v) => v.trim())
+    .filter(Boolean)
+    // Longest first so "Natural Minor" wins over a bare "Minor" that would
+    // otherwise match its tail and leave "Natural" stranded in the name.
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  if (words.length === 0) return name;
+
+  // Root spelling is display-layer and users type both accidentals; the engine
+  // emits sharps, but a hand-typed "Bb Dorian" is the same statement.
+  const root = "[A-Ga-g](?:#|b|♯|♭)?";
+  // Eat any separator the key was hung off ("Verse - C Major", "Pad — C Major").
+  const sep = "[\\s\\-–—]*";
+  // Case-insensitive: the engine writes "C major" while the catalog writes
+  // "Dorian", and a user types whatever they type.
+  const re = new RegExp(`${sep}${root}\\s+(?:${words.join("|")})\\s*$`, "i");
+  return name.replace(re, "").trim();
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

@@ -118,9 +118,11 @@ This repo carries the standard agent harness. Orientation for a contributor
   (chiefly: *no music theory lives here* — it stays in the Tonality engine).
 - **[CODEMAP.md](CODEMAP.md)** — where everything lives.
 - **[DECISIONS.md](DECISIONS.md)** — what's already settled.
-- **`./verify fast | full | report`** — the oracle. `fast` = typecheck +
-  Python compile-check; `full` also builds the bundle and contract-checks the
-  bridge (skipped-with-notice when the Tonality engine is absent).
+- **`./verify fast | full | report`** — the oracle. `fast` = the kit gates
+  (privacy/leak scan + kit integrity, vendored in `.kit/`) + typecheck + unit
+  tests + Python compile-check; `full` also builds the bundle and
+  contract-checks the bridge (skipped-with-notice when the Tonality engine is
+  absent). `.kit/` missing is a hard exit — gates are never skipped.
 
 _Last verified: 2026-08-09 — `./verify full` green end-to-end against a live bridge
 (13 extension + 19 bridge tests; `/health` + `/analyze` + `/transform` contract checks)._
