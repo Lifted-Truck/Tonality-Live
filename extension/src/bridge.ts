@@ -163,6 +163,19 @@ export async function fetchScales(): Promise<ScaleInfo[]> {
 export interface WorkshopResult {
   notes: Required<BridgeNote>[] | null;   // null = cancelled
   report?: ConformReport & { pre_transpose?: number; notes_folded?: number };
+  /**
+   * Display label for the key the render lands in, e.g. "C Dorian" — used to
+   * name the clip. The page supplies it because that is where the target was
+   * chosen; null when it could not be established (a transpose whose result the
+   * engine declined to analyse), in which case the clip keeps its name.
+   */
+  keyLabel?: string | null;
+  /**
+   * Scale words the engine knows, so a key already stated in the clip name can
+   * be recognised and replaced. Comes from the engine catalog — this repo holds
+   * no scale table of its own.
+   */
+  keyVocab?: string[];
 }
 
 /**

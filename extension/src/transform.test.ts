@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { dedupeCollisions, transpose } from "./transform.js";
+import { dedupeCollisions, nameWithKey, transpose } from "./transform.js";
 import type { Collision } from "./bridge.js";
 
 type Note = { pitch: number; startTime: number; duration: number };
@@ -104,4 +104,60 @@ test("notes differing only in duration are different slots", () => {
   const { notes: out, removed } = dedupeCollisions(notes, [collision(60, 0, 1, [60, 61])]);
   assert.equal(removed, 0);
   assert.equal(out.length, 2);
+});
+
+/* --------------------------- nameWithKey ---------------------------------- */
+/* The vocab is engine-shaped on purpose: catalog scale names, plus the mode
+   word the analysis emits ("major"/"minor"), which is NOT in the catalog. */
+const VOCAB = ["Ionian", "Dorian", "Aeolian", "Natural Minor", "Harmonic Minor",
+               "Minor Pentatonic", "Chromatic", "major", "minor"];
+
+test("appends the key when the name states none", () => {
+  assert.equal(nameWithKey("Bassline", "C Dorian", VOCAB), "Bassline C Dorian");
+});
+
+test("replaces a key the engine's own analysis would have written", () => {
+  assert.equal(nameWithKey("Verse C major", "G Dorian", VOCAB), "Verse G Dorian");
+});
+
+test("replaces a multi-word scale without stranding half of it", () => {
+  // The bug this pins: a bare "Minor" alternative matching the tail of
+  // "Natural Minor" would leave "Lead Natural" behind.
+  assert.equal(nameWithKey("Lead A Natural Minor", "C Dorian", VOCAB), "Lead C Dorian");
+});
+
+test("leaves a key that is not the LAST thing stated", () => {
+  assert.equal(nameWithKey("C major vibes", "D Dorian", VOCAB), "C major vibes D Dorian");
+});
+
+test("a bare root is a take name, not a key — it survives", () => {
+  assert.equal(nameWithKey("Take C", "C Dorian", VOCAB), "Take C C Dorian");
+});
+
+test("eats the separator the old key hung off", () => {
+  assert.equal(nameWithKey("Pad — F# Dorian", "C Ionian", VOCAB), "Pad C Ionian");
+  assert.equal(nameWithKey("Pad - F# Dorian", "C Ionian", VOCAB), "Pad C Ionian");
+});
+
+test("flat spellings are recognised even though the engine emits sharps", () => {
+  assert.equal(nameWithKey("Keys Bb minor", "C Dorian", VOCAB), "Keys C Dorian");
+});
+
+test("a name that is only a key becomes only the new key", () => {
+  assert.equal(nameWithKey("C major", "A Aeolian", VOCAB), "A Aeolian");
+  assert.equal(nameWithKey("", "A Aeolian", VOCAB), "A Aeolian");
+});
+
+test("rendering twice does not grow a tail of keys", () => {
+  const once = nameWithKey("Verse", "C Dorian", VOCAB);
+  assert.equal(nameWithKey(once, "C Dorian", VOCAB), once, "must be idempotent");
+});
+
+test("a word outside the engine's vocab is not mistaken for a scale", () => {
+  assert.equal(nameWithKey("Bass C Blorp", "C Dorian", VOCAB), "Bass C Blorp C Dorian");
+});
+
+test("an empty vocab or label never mangles the name", () => {
+  assert.equal(nameWithKey("Verse C major", "C Dorian", []), "Verse C major C Dorian");
+  assert.equal(nameWithKey("Verse", "  ", VOCAB), "Verse");
 });

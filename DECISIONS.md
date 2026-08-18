@@ -4,6 +4,29 @@ Append-only record of ratified decisions. Newest first. ROADMAP.md holds
 direction; this file holds *what was settled and why*, so it is not
 re-litigated. Each entry links to a trace where one exists.
 
+## D9 — 2026-08-18 — Naming a clip with its key is display-layer, and the vocabulary comes from the engine
+
+- **Decision:** the workshop's Render writes the resulting key into the clip
+  name. The append-or-replace policy lives in `nameWithKey`
+  (`extension/src/transform.ts`) where it is pure and unit-testable; the *key
+  label* and the *scale vocabulary* are supplied by the page.
+- **Why this does not breach the no-theory-here invariant.** Recognising the
+  engine's own labels is string work on display data (rule 8), the same licence
+  the page already takes when it parses `"C major"` to preselect a target. What
+  would have breached it is **owning a list of scale names** in order to spot a
+  key in a clip name — so the list is passed in, sourced from `GET /scales` plus
+  the mode word the analysis emitted. `nameWithKey` knows no scale at all; hand
+  it an empty vocabulary and it degrades to a plain append.
+- **The label is the declared target for conform/remap, the detected key for
+  transpose.** Not a stylistic split: measured in the live page, a C-Dorian
+  remap analyses back as `"F major"`. Detection is the only available answer
+  when the user declared no target, and the wrong answer when they did.
+- **Rename shares the note write's transaction.** One Cmd+Z restores both; a
+  clip labelled with a key it is no longer in is worse than one never renamed.
+- **Scope:** the workshop path only. The four legacy commands are unchanged —
+  they are slated for removal under Q-004, and teaching a path that is about to
+  be deleted is work spent twice.
+
 ## D8 — 2026-08-18 — Vendor the kit-owned gates; adopt the leak gate this repo never had
 
 - **Decision:** source `record`, `leak_gate`, and `kit_integrity` from the

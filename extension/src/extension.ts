@@ -31,7 +31,7 @@ import {
   type WorkshopResult,
 } from "./bridge.js";
 import { launchConfigPath, readLaunchConfig, writeLaunchConfig } from "./bridgeProcess.js";
-import { dedupeCollisions, transpose } from "./transform.js";
+import { dedupeCollisions, nameWithKey, transpose } from "./transform.js";
 
 import analysisHtml from "../ui/analysis.html";
 import bridgeSetupHtml from "../ui/bridge-setup.html";
@@ -177,8 +177,16 @@ export function activate(activation: ActivationContext): void {
         result.notes,
         result.report?.collisions ?? [],
       );
+      // Name computed OUTSIDE the transaction so the only work inside it is the
+      // two assignments — and inside the SAME one, so a single Cmd+Z takes back
+      // the notes and the name together rather than leaving a clip labelled
+      // with a key it is no longer in.
+      const renamed = result.keyLabel
+        ? nameWithKey(clip.name, result.keyLabel, result.keyVocab ?? [])
+        : null;
       context.withinTransaction(() => {
         clip.notes = notes;
+        if (renamed !== null) clip.name = renamed;
       });
       if (removed > 0) {
         await showAnalysis(context, {

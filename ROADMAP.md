@@ -404,6 +404,37 @@ theory in this repo** — theory-driven alters go through the bridge's
   end-to-end by their guarantee; nothing to pin on our side beyond not adding
   a model in front of it.
 
+### Q-019 — Workshop render polish: playhead alignment, key in the clip name
+- **Status:** done 2026-08-18 (trace: traces/2026-08-18-q019-render-polish.md).
+  Human-reported, both items.
+- **Playhead was skewed, not merely offset.** It is the one overlay drawn as a
+  DOM element rather than on the canvas, so it had to redo the canvas's
+  `bx()` mapping by hand — and did not: `left: frac*100%` measures across
+  `.rollwrap`, which spans the keyboard gutter as well as the roll. Measured in
+  the live page: at beat 0 it sat 56px inside the keys, at the quarter mark 42px
+  early, at the half 28px early, correct only at the very end. Now
+  `calc(var(--gutter) + frac * (100% - var(--gutter)))` — the same variable the
+  chord strips align to, so all three agree by construction. Verified: playhead
+  x matches canvas `bx()` to <0.6px at 0 / 0.25 / 0.5 / 1.
+- **Rendered clips carry their new key.** Appended, or replacing a key already
+  stated last in the name, so repeated renders leave one key rather than a tail.
+  `nameWithKey` (extension/src/transform.ts) is pure and unit-tested (11 cases);
+  the name is computed outside `withinTransaction` and assigned inside it, so
+  one Cmd+Z takes back notes and name together.
+- **Where the label comes from, and why it differs by op.** Conform and remap
+  declare a target, so the target IS the answer. Transpose declares none, so the
+  label is whatever the engine reads off the result. This is measured, not
+  assumed: a C-Dorian remap analyses back as **"F major"** (the relative
+  Ionian), so using detection everywhere would have renamed the clip to the
+  wrong mode after the user explicitly chose Dorian.
+- **No scale table was added here.** The vocabulary for "this name already
+  states a key" is sent by the page from the engine's own catalog (37 names)
+  plus the mode word its analysis used ("major"/"minor" are not catalog
+  entries) — so the §Domain no-theory invariant holds. See DECISIONS D9.
+- **Not verified end-to-end:** `clip.name` is declared settable on the SDK's
+  `Clip`, but the assignment has not been exercised inside a running Live. The
+  standing gap (no automated in-Live harness) applies.
+
 ### Q-014 — A/B loop audition + chord-strip interaction
 - **Status:** done 2026-08-15 (trace: traces/2026-08-15-q014-loop-audition.md).
   Pure UI, no engine work — as scoped.
